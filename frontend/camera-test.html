@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Camera Test</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #1a1a1a; color: white; }
+        button { padding: 10px 20px; margin: 10px; cursor: pointer; background: #4caf50; border: none; color: white; border-radius: 8px; }
+        video, img { width: 100%; max-width: 500px; border-radius: 16px; background: #000; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <h2>Camera Test - AgroGuard AI</h2>
+    
+    <div>
+        <button id="uploadTabBtn">📷 Upload Photo</button>
+        <button id="cameraTabBtn">🎥 Live Camera</button>
+    </div>
+    
+    <!-- Upload Panel -->
+    <div id="uploadPanel">
+        <input type="file" id="imageInput" accept="image/*">
+        <img id="preview" style="width: 100%; max-width: 500px; margin-top: 10px;">
+    </div>
+    
+    <!-- Camera Panel -->
+    <div id="cameraPanel" style="display: none;">
+        <video id="cameraFeed" autoplay playsinline style="width: 100%; max-width: 500px;"></video>
+        <button id="captureBtn" disabled>Capture</button>
+        <button id="retakeBtn" style="display: none;">Retake</button>
+        <div id="previewWrap" style="display: none;">
+            <img id="capturePreview" style="width: 100%; max-width: 500px;">
+        </div>
+    </div>
+    
+    <button id="detectBtn" disabled>Detect Disease</button>
+    
+    <script>
+        let stream = null;
+        let capturedBlob = null;
+        
+        // Tab switching
+        document.getElementById('uploadTabBtn').onclick = () => {
+            document.getElementById('uploadPanel').style.display = 'block';
+            document.getElementById('cameraPanel').style.display = 'none';
+            if (stream) stream.getTracks().forEach(t => t.stop());
+        };
+        
+        document.getElementById('cameraTabBtn').onclick = () => {
+            document.getElementById('uploadPanel').style.display = 'none';
+            document.getElementById('cameraPanel').style.display = 'block';
+            startCamera();
+        };
+        
+        function startCamera() {
+            const video = document.getElementById('cameraFeed');
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                .then(s => {
+                    stream = s;
+                    video.srcObject = s;
+                    document.getElementById('captureBtn').disabled = false;
+                    console.log('Camera started');
+                })
+                .catch(err => console.error('Camera error:', err));
+        }
+        
+        // Capture
+        document.getElementById('captureBtn').onclick = () => {
+            const video = document.getElementById('cameraFeed');
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            const dataUrl = canvas.toDataURL('image/jpeg');
+            document.getElementById('capturePreview').src = dataUrl;
+            document.getElementById('previewWrap').style.display = 'block';
+            video.style.display = 'none';
+            document.getElementById('captureBtn').style.display = 'none';
+            document.getElementById('retakeBtn').style.display = 'inline-block';
+            
+            canvas.toBlob(blob => {
+                capturedBlob = blob;
+                document.getElementById('detectBtn').disabled = false;
+            }, 'image/jpeg');
+        };
+        
+        // Retake
+        document.getElementById('retakeBtn').onclick = () => {
+            document.getElementById('previewWrap').style.display = 'none';
+            document.getElementById('cameraFeed').style.display = 'block';
+            document.getElementById('captureBtn').style.display = 'inline-block';
+            document.getElementById('retakeBtn').style.display = 'none';
+            document.getElementById('detectBtn').disabled = true;
+            capturedBlob = null;
+        };
+        
+        // File upload preview
+        document.getElementById('imageInput').onchange = (e) => {
+            if (e.target.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    document.getElementById('preview').src = event.target.result;
+                    document.getElementById('detectBtn').disabled = false;
+                };
+                reader.readAsDataURL(e.target.files[0]);
+            }
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AgroGuard AI — Crop Disease Detection</title>
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <!-- jsPDF — MUST be in head so it loads before any button click -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    .features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem;padding:4rem 0}
+    .feature-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.75rem;transition:all var(--transition)}
+    .feature-card:hover{border-color:var(--moss);transform:translateY(-4px);box-shadow:var(--shadow-glow)}
+    .feature-icon{font-size:2rem;margin-bottom:1rem;width:52px;height:52px;background:rgba(106,173,61,0.1);border-radius:12px;display:flex;align-items:center;justify-content:center}
+    .feature-card h3{margin-bottom:.5rem;font-size:1rem}
+    .section{padding:3rem 0}
+    .section-label{font-size:.75rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:.75rem}
+    .section-title{margin-bottom:.75rem}
+    .steps{display:flex;gap:0;position:relative;margin-top:2.5rem}
+    .steps::before{content:'';position:absolute;top:24px;left:24px;right:24px;height:2px;background:var(--border)}
+    .step{flex:1;text-align:center;padding:0 1rem;position:relative}
+    .step-num{width:48px;height:48px;border-radius:50%;background:var(--earth);border:2px solid var(--leaf);color:var(--leaf);font-weight:700;font-size:1.1rem;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;position:relative;z-index:1}
+    .step h4{font-size:.95rem;margin-bottom:.4rem}
+    .step p{font-size:.82rem}
+    @media(max-width:768px){.features-grid{grid-template-columns:1fr}.steps{flex-direction:column;gap:1.5rem}.steps::before{display:none}}
+
+    /* ── Scan Tabs ─────────────────────────────────────── */
+    .scan-tabs{display:flex;gap:.5rem;margin-bottom:1rem}
+    .scan-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:.4rem;padding:.55rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text-muted);font-size:.82rem;font-weight:600;cursor:pointer;transition:all .2s}
+    .scan-tab.active{background:var(--earth);border-color:var(--leaf);color:var(--leaf)}
+    .scan-tab:hover{border-color:var(--leaf);color:var(--leaf)}
+
+    /* ── Camera ─────────────────────────────────────────── */
+    #cameraPanel{display:none}
+    .cam-wrap{position:relative;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:4/3;margin-bottom:.75rem}
+    #cameraFeed{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1)}
+    .cam-ring{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:150px;height:150px;border:2px dashed rgba(90,158,47,.75);border-radius:50%;pointer-events:none}
+    .cam-hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);color:#A8E050;font-size:.72rem;padding:3px 12px;border-radius:20px;white-space:nowrap}
+    #canvasHidden{display:none}
+    #captureBtn{width:100%;display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.7rem;background:var(--leaf);border:none;border-radius:10px;color:var(--void);font-size:.9rem;font-weight:700;cursor:pointer;margin-bottom:.5rem}
+    #captureBtn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+    #retakeBtn{width:100%;display:none;align-items:center;justify-content:center;gap:.5rem;padding:.5rem;background:none;border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font-size:.82rem;cursor:pointer;margin-bottom:.5rem}
+    #capturePreviewWrap{display:none;margin-top:.5rem}
+    #capturePreview{width:100%;border-radius:10px;border:1px solid var(--border)}
+
+    /* ── Result Action Buttons ─────────────────────────── */
+    .result-actions{display:none;flex-wrap:wrap;gap:.6rem;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)}
+    .rab{display:inline-flex;align-items:center;gap:.4rem;padding:.5rem .9rem;border-radius:8px;font-size:.84rem;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .2s;background:none}
+    .rab-pdf{border-color:#dc2626;color:#dc2626}.rab-pdf:hover{background:rgba(220,38,38,.12)}
+    .rab-wa{border-color:#25D366;color:#25D366}.rab-wa:hover{background:rgba(37,211,102,.12)}
+    .rab-rescan{border-color:var(--leaf);color:var(--leaf)}.rab-rescan:hover{background:rgba(90,158,47,.12)}
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="/" class="nav-brand"><div class="leaf-icon">🌿</div>AgroGuard AI</a>
+  <ul class="nav-links">
+    <li><a href="/" class="active" data-i18n="home">Home</a></li>
+    <li><a href="/dashboard.html" data-i18n="dashboard">Dashboard</a></li>
+    <li><a href="/map.html" data-i18n="disease_map">Disease Map</a></li>
+  </ul>
+  <div class="nav-right">
+    <button id="voiceBtn" class="voice-btn" style="background: #4caf50; border: none; border-radius: 50px; padding: 6px 12px; color: white; cursor: pointer; margin-right: 8px;">🎤 Speak</button>
+    <select id="langSelect" class="lang-select">
+      <option value="en">🇬🇧 English</option>
+      <option value="hi">🇮🇳 हिन्दी</option>
+      <option value="pa">🌾 ਪੰਜਾਬੀ</option>
+    </select>
+    <button id="navLoginBtn" class="btn btn-primary btn-sm" data-open-auth="login">
+      <i class="fa fa-sign-in-alt"></i> <span data-i18n="login">Login</span>
+    </button>
+    <div id="navUserChip" class="user-chip hidden" style="cursor:pointer;" title="View profile">
+      <div id="navAvatar" class="user-avatar">U</div>
+      <span id="navUserName">User</span>
+      <i class="fa fa-chevron-down" style="font-size:10px;color:var(--text-muted);"></i>
+      <button id="navLogoutBtn" class="btn btn-ghost btn-sm" style="padding:.2rem .5rem;margin-left:4px;" data-i18n="logout">Logout</button>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <div class="hero">
+    <div class="hero-content">
+      <div class="hero-badge"><span>🌱</span><span data-i18n="ai_badge">AI-Powered Agri-Tech</span></div>
+      <h1>Protect Your Crops with <em>Intelligent</em> AI</h1>
+      <p data-i18n="tagline">Upload a plant leaf image and get instant disease diagnosis with treatment advice — in seconds.</p>
+      <div class="hero-actions">
+        <button class="btn btn-primary btn-lg" id="heroDetectBtn">
+          <i class="fa fa-microscope"></i><span data-i18n="detect_disease">Detect Disease</span>
+        </button>
+        <a href="/dashboard.html" class="btn btn-secondary btn-lg">
+          <i class="fa fa-chart-bar"></i><span data-i18n="dashboard">Dashboard</span>
+        </a>
+      </div>
+      <div class="hero-stats">
+        <div><div class="hero-stat-num">12K+</div><div class="hero-stat-label" data-i18n="farmers_helped">Farmers Helped</div></div>
+        <div><div class="hero-stat-num">3</div><div class="hero-stat-label" data-i18n="diseases_detected">Diseases Detected</div></div>
+        <div><div class="hero-stat-num">94%</div><div class="hero-stat-label" data-i18n="accuracy">Model Accuracy</div></div>
+      </div>
+    </div>
+
+    <div class="upload-panel" id="uploadPanel">
+      <h3 style="margin-bottom:1rem;font-family:var(--font-display);">
+        <i class="fa fa-leaf" style="color:var(--accent);margin-right:8px;"></i>
+        <span data-i18n="upload_image">Upload Leaf Image</span>
+      </h3>
+
+      <div class="scan-tabs">
+        <div class="scan-tab active" id="tabUpload" onclick="switchTab('upload')">
+          <i class="fa fa-image"></i> Upload Photo
+        </div>
+        <div class="scan-tab" id="tabCamera" onclick="switchTab('camera')">
+          <i class="fa fa-camera"></i> Live Camera
+        </div>
+      </div>
+
+      <div id="uploadInner">
+        <div class="upload-zone" id="dropZone">
+          <input type="file" id="imageInput" accept="image/jpeg,image/png,image/webp"/>
+          <div id="dropContent">
+            <div class="upload-icon">🍃</div>
+            <p style="font-weight:600;color:var(--text);margin-bottom:.35rem;" data-i18n="drag_drop">Drag & drop or click to upload</p>
+            <p style="font-size:.8rem;" data-i18n="supported">Supports JPG, PNG, WEBP (max 10MB)</p>
+          </div>
+          <img id="previewImg" class="preview-img" alt="Preview"/>
+        </div>
+      </div>
+
+      <div id="cameraPanel">
+        <div class="cam-wrap">
+          <video id="cameraFeed" autoplay playsinline muted></video>
+          <div class="cam-ring"></div>
+          <div class="cam-hint">Place leaf inside the circle</div>
+        </div>
+        <canvas id="canvasHidden"></canvas>
+        <button id="captureBtn" disabled><i class="fa fa-camera"></i> Capture Leaf Photo</button>
+        <button id="retakeBtn"><i class="fa fa-redo"></i> Retake Photo</button>
+        <div id="capturePreviewWrap"><img id="capturePreview" alt="captured"/></div>
+      </div>
+
+      <div id="locationBox" class="hidden" style="margin-top:1rem;">
+        <div class="alert alert-info" style="font-size:.82rem;">
+          <i class="fa fa-map-marker-alt"></i>
+          <span data-i18n="share_location">Share location for outbreak map?</span>
+          <div style="display:flex;gap:.5rem;margin-top:.5rem;">
+            <button class="btn btn-sm btn-primary" id="shareLocYes">Yes</button>
+            <button class="btn btn-sm btn-secondary" id="shareLocNo">No</button>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary w-full mt-2" id="detectBtn" style="justify-content:center;" disabled>
+        <i class="fa fa-dna"></i><span data-i18n="detect_disease">Detect Disease</span>
+      </button>
+      <div id="alertArea" style="margin-top:1rem;"></div>
+    </div>
+  </div>
+
+  <div class="container" id="resultSection" style="display:none;padding-bottom:3rem;">
+    <h2 style="margin-bottom:1.25rem;" data-i18n="result_title">Detection Result</h2>
+    <div class="result-card" id="resultCard">
+      <div class="result-header">
+        <div class="confidence-ring" id="confidenceRing"></div>
+        <div style="flex:1;">
+          <h3 id="resultDisease" style="margin-bottom:.4rem;">—</h3>
+          <span id="resultSeverity" class="severity-badge">—</span>
+        </div>
+      </div>
+      <div class="result-body">
+        <div class="result-tabs">
+          <div class="result-tab active" data-tab="description" data-i18n="description">Description</div>
+          <div class="result-tab" data-tab="treatment" data-i18n="treatment">Treatment</div>
+          <div class="result-tab" data-tab="prevention" data-i18n="prevention">Prevention</div>
+        </div>
+        <div id="tab-description" class="tab-pane active"></div>
+        <div id="tab-treatment" class="tab-pane"></div>
+        <div id="tab-prevention" class="tab-pane"></div>
+      </div>
+    </div>
+
+    <div class="result-actions" id="resultActions">
+      <button class="rab rab-pdf" id="pdfBtn">
+        <i class="fa fa-file-pdf"></i> Download PDF
+      </button>
+      <button class="rab rab-wa" id="waBtn">
+        <i class="fa fa-comment"></i> Share on WhatsApp
+      </button>
+      <button class="rab rab-rescan" id="rescanBtn">
+        <i class="fa fa-redo"></i> Scan Another
+      </button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="section">
+      <div class="section-label" data-i18n="why_label">Why AgroGuard AI</div>
+      <h2 class="section-title" data-i18n="why_title">Everything a farmer needs</h2>
+      <div class="features-grid">
+        <div class="feature-card"><div class="feature-icon">🔬</div><h3 data-i18n="feature1_title">AI Disease Detection</h3><p data-i18n="feature1_desc">TensorFlow-powered model trained on plant images for accurate diagnosis.</p></div>
+        <div class="feature-card"><div class="feature-icon">💊</div><h3 data-i18n="feature2_title">Treatment Advice</h3><p data-i18n="feature2_desc">Detailed treatment protocols and prevention tips from agronomy experts.</p></div>
+        <div class="feature-card"><div class="feature-icon">🗺️</div><h3 data-i18n="feature3_title">Outbreak Heatmap</h3><p data-i18n="feature3_desc">Real-time disease outbreak visualization across India.</p></div>
+        <div class="feature-card"><div class="feature-icon">📊</div><h3 data-i18n="feature4_title">Dashboard Analytics</h3><p data-i18n="feature4_desc">Track scan history, disease trends, and weekly activity.</p></div>
+        <div class="feature-card"><div class="feature-icon">🌐</div><h3 data-i18n="feature5_title">Multilingual</h3><p data-i18n="feature5_desc">Available in English, Hindi, and Punjabi.</p></div>
+        <div class="feature-card"><div class="feature-icon">📱</div><h3 data-i18n="feature6_title">Mobile Friendly</h3><p data-i18n="feature6_desc">Fully responsive — use from your smartphone in the field.</p></div>
+      </div>
+    </div>
+    <div class="section" style="border-top:1px solid var(--border);padding-top:3rem;">
+      <div class="section-label" data-i18n="how_label">Process</div>
+      <h2 class="section-title" data-i18n="how_title">How it works</h2>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><h4 data-i18n="step1_title">Upload Leaf</h4><p data-i18n="step1_desc">Take a clear photo of the affected plant leaf</p></div>
+        <div class="step"><div class="step-num">2</div><h4 data-i18n="step2_title">AI Analysis</h4><p data-i18n="step2_desc">Our model analyzes the image in under 2 seconds</p></div>
+        <div class="step"><div class="step-num">3</div><h4 data-i18n="step3_title">Get Results</h4><p data-i18n="step3_desc">Disease name, confidence score and treatment plan</p></div>
+        <div class="step"><div class="step-num">4</div><h4 data-i18n="step4_title">Take Action</h4><p data-i18n="step4_desc">Follow expert-curated treatment and prevention tips</p></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" data-i18n="loading">Analyzing your leaf...</div>
+</div>
+
+<div class="modal-overlay" id="authModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle" style="font-family:var(--font-display);">Sign In</h3>
+      <button class="modal-close" data-modal-close>✕</button>
+    </div>
+    <div class="modal-tabs">
+      <div class="modal-tab active" id="tabLogin" data-i18n="sign_in">Sign In</div>
+      <div class="modal-tab" id="tabRegister" data-i18n="sign_up">Sign Up</div>
+    </div>
+    <form id="loginForm">
+      <div class="form-group"><label class="form-label" data-i18n="email">Email</label><input id="loginEmail" type="email" class="form-input" placeholder="Email Address" required/></div>
+      <div class="form-group"><label class="form-label" data-i18n="password">Password</label><input id="loginPassword" type="password" class="form-input" placeholder="Password" required/></div>
+      <button type="submit" class="btn btn-primary w-full" style="justify-content:center;" data-i18n="sign_in">Sign In</button>
+      <p style="text-align:center;margin-top:1rem;font-size:.85rem;"><span data-i18n="no_account">Don't have an account?</span> <a href="#" data-switch-tab="register" data-i18n="sign_up">Sign Up</a></p>
+    </form>
+    <form id="registerForm" class="hidden">
+      <div class="form-group"><label class="form-label" data-i18n="name">Full Name</label><input id="regName" type="text" class="form-input" placeholder="Full Name" required/></div>
+      <div class="form-group"><label class="form-label" data-i18n="email">Email</label><input id="regEmail" type="email" class="form-input" placeholder="Email Address" required/></div>
+      <div class="form-group"><label class="form-label" data-i18n="password">Password</label><input id="regPassword" type="password" class="form-input" placeholder="Password (min 6 chars)" required minlength="6"/></div>
+      <div class="form-group"><label class="form-label" data-i18n="location">Location</label><input id="regLocation" type="text" class="form-input" placeholder="e.g. Ludhiana, Punjab"/></div>
+      <button type="submit" class="btn btn-primary w-full" style="justify-content:center;" data-i18n="sign_up">Sign Up</button>
+      <p style="text-align:center;margin-top:1rem;font-size:.85rem;"><span data-i18n="already_account">Already have an account?</span> <a href="#" data-switch-tab="login" data-i18n="sign_in">Sign In</a></p>
+    </form>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script src="js/auth.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════
+   AgroGuard AI — Main Page (Camera & Detection Only)
+═══════════════════════════════════════════════════════ */
+
+window._result = null;
+window._imgData = null;
+
+var _stream = null;
+var _blob = null;
+var _activeTab = 'upload';
+var _lat = null;
+var _lng = null;
+
+var imageInput = document.getElementById('imageInput');
+var dropZone = document.getElementById('dropZone');
+var previewImg = document.getElementById('previewImg');
+var detectBtn = document.getElementById('detectBtn');
+var resultSec = document.getElementById('resultSection');
+var loadingOvly = document.getElementById('loadingOverlay');
+var locationBox = document.getElementById('locationBox');
+
+window.switchTab = function(tab) {
+  _activeTab = tab;
+  document.getElementById('tabUpload').classList.toggle('active', tab === 'upload');
+  document.getElementById('tabCamera').classList.toggle('active', tab === 'camera');
+  document.getElementById('uploadInner').style.display = tab === 'upload' ? '' : 'none';
+  document.getElementById('cameraPanel').style.display = tab === 'camera' ? '' : 'none';
+  if (tab === 'camera') startCam();
+  else stopCam();
+};
+
+function startCam() {
+  resetCam();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    notify('Camera not supported.', 'warning');
+    switchTab('upload');
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } })
+    .then(function(s) {
+      _stream = s;
+      document.getElementById('cameraFeed').srcObject = s;
+      document.getElementById('captureBtn').disabled = false;
+      notify('Camera ready!', 'success', 3000);
+    })
+    .catch(function(err) {
+      notify('Camera not available.', 'warning');
+      switchTab('upload');
+    });
+}
+
+function stopCam() {
+  if (_stream) { _stream.getTracks().forEach(function(t){ t.stop(); }); _stream = null; }
+  var v = document.getElementById('cameraFeed');
+  if (v) v.srcObject = null;
+}
+
+function resetCam() {
+  _blob = null;
+  var wrap = document.getElementById('capturePreviewWrap');
+  var feed = document.getElementById('cameraFeed');
+  var cbtn = document.getElementById('captureBtn');
+  var rbtn = document.getElementById('retakeBtn');
+  if (wrap) wrap.style.display = 'none';
+  if (feed) feed.style.display = 'block';
+  if (cbtn) { cbtn.innerHTML = '<i class="fa fa-camera"></i> Capture'; cbtn.disabled = true; }
+  if (rbtn) rbtn.style.display = 'none';
+  detectBtn.disabled = true;
+}
+
+document.getElementById('captureBtn').addEventListener('click', function() {
+  var video = document.getElementById('cameraFeed');
+  var canvas = document.getElementById('canvasHidden');
+  var preview = document.getElementById('capturePreview');
+  var wrap = document.getElementById('capturePreviewWrap');
+  if (!_stream || !video.videoWidth) { notify('Camera not ready.', 'warning'); return; }
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  var ctx = canvas.getContext('2d');
+  ctx.save(); ctx.scale(-1,1); ctx.drawImage(video, -canvas.width, 0); ctx.restore();
+  var dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+  preview.src = dataUrl;
+  wrap.style.display = 'block';
+  video.style.display = 'none';
+  window._imgData = dataUrl;
+  canvas.toBlob(function(b){
+    _blob = b;
+    document.getElementById('captureBtn').innerHTML = '<i class="fa fa-check"></i> Captured!';
+    document.getElementById('retakeBtn').style.display = 'flex';
+    detectBtn.disabled = false;
+    if (isLoggedIn()) locationBox.classList.remove('hidden');
+    notify('Photo captured! Click Detect Disease.', 'success', 3000);
+  }, 'image/jpeg', 0.92);
+});
+
+document.getElementById('retakeBtn').addEventListener('click', function() {
+  resetCam();
+  document.getElementById('cameraFeed').style.display = 'block';
+  locationBox.classList.add('hidden');
+});
+
+document.getElementById('heroDetectBtn').addEventListener('click', function() {
+  if (!isLoggedIn()) { window.openAuthModal && window.openAuthModal('register'); }
+  else { document.getElementById('uploadPanel').scrollIntoView({behavior:'smooth'}); imageInput.click(); }
+});
+
+dropZone.addEventListener('dragover', function(e){ e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', function(){ dropZone.classList.remove('dragover'); });
+dropZone.addEventListener('drop', function(e){
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+imageInput.addEventListener('change', function(){
+  if (imageInput.files[0]) handleFile(imageInput.files[0]);
+});
+
+function handleFile(file) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    previewImg.src = e.target.result;
+    previewImg.classList.add('visible');
+    document.getElementById('dropContent').style.display = 'none';
+    window._imgData = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  detectBtn.disabled = false;
+  if (isLoggedIn()) locationBox.classList.remove('hidden');
+}
+
+document.getElementById('shareLocYes').addEventListener('click', function() {
+  locationBox.classList.add('hidden');
+  getUserLocation().then(function(loc){
+    if (loc) { _lat = loc.lat; _lng = loc.lng; notify('Location shared!', 'success', 2500); }
+    else notify('Could not get location.', 'warning');
+  });
+});
+document.getElementById('shareLocNo').addEventListener('click', function() {
+  locationBox.classList.add('hidden'); _lat = null; _lng = null;
+});
+
+detectBtn.addEventListener('click', async function() {
+  if (!isLoggedIn()) { window.openAuthModal && window.openAuthModal('login'); return; }
+  var file = (_activeTab === 'camera' && _blob) ? new File([_blob], 'leaf.jpg', {type:'image/jpeg'}) : imageInput.files[0];
+  if (!file) { notify('Please select or capture a leaf photo first.', 'error'); return; }
+
+  loadingOvly.classList.add('active');
+  detectBtn.disabled = true;
+  try {
+    var fd = new FormData();
+    fd.append('file', file);
+    fd.append('lang', localStorage.getItem('lang') || 'en');
+    if (_lat) fd.append('latitude', _lat);
+    if (_lng) fd.append('longitude', _lng);
+    var user = getUser();
+    if (user && user.location) fd.append('location_name', user.location);
+    var result = await api('POST', '/predict/', fd, true);
+    if (typeof window.showResult === 'function') {
+      window.showResult(result);
+      window._result = result;
+    } else {
+      window._result = result;
+      resultSec.style.display = 'block';
+      resultSec.scrollIntoView({behavior:'smooth'});
+      document.getElementById('resultDisease').textContent = fmtDisease(result.disease_name);
+      document.getElementById('resultSeverity').textContent = result.severity;
+      document.getElementById('tab-description').textContent = result.description;
+      document.getElementById('tab-treatment').textContent = result.treatment;
+      document.getElementById('tab-prevention').textContent = result.prevention;
+      document.getElementById('resultActions').style.display = 'flex';
+    }
+    notify('Scan complete!', 'success');
+  } catch(err) { notify(err.message, 'error'); }
+  finally {
+    loadingOvly.classList.remove('active');
+    detectBtn.disabled = false;
+  }
+});
+
+function fmtDisease(name) {
+  if (!name) return 'Unknown';
+  return name.replace(/^Tomato_{1,2}/,'').replace(/_/g,' ').trim();
+}
+
+// ==================== FIXED PDF FUNCTION ====================
+document.getElementById('pdfBtn').addEventListener('click', function() {
+  var r = window._result;
+  if (!r) { notify('Please scan a leaf first.', 'warning'); return; }
+
+  var jsPDFLib = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+  if (!jsPDFLib) { notify('PDF library not ready.', 'error'); return; }
+
+  var btn = this;
+  var originalHtml = btn.innerHTML;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Generating...';
+  btn.disabled = true;
+
+  function toJpegBase64(dataUrl, callback) {
+    if (!dataUrl) return callback(null);
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      var base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+      callback(base64);
+    };
+    img.onerror = function() { callback(null); };
+    img.src = dataUrl;
+  }
+
+  toJpegBase64(window._imgData, function(jpegBase64) {
+    try {
+      var doc = new jsPDFLib({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      var W = 210, M = 15;
+      var y = M;
+
+      // Header
+      doc.setFillColor(46, 106, 79);
+      doc.rect(0, 0, W, 25, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.setTextColor(255, 255, 255);
+      doc.text('AgroGuard AI', M, 12);
+      doc.setFontSize(10);
+      doc.setTextColor(200, 230, 200);
+      doc.text('AI-Powered Crop Disease Detection Report', M, 20);
+      
+      var dt = new Date().toLocaleDateString('en-IN');
+      doc.setFontSize(9);
+      doc.setTextColor(200, 200, 200);
+      doc.text(dt, W - M, 12, { align: 'right' });
+      y = 35;
+
+      // Disease name
+      var disease = (r.disease_name || 'Unknown').replace(/Tomato_*/g, '').replace(/_/g, ' ');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(22);
+      doc.setTextColor(46, 106, 79);
+      doc.text(disease, M, y);
+      y += 8;
+
+      // Severity
+      var severity = r.severity || 'unknown';
+      var sevColor = severity === 'critical' ? [220, 38, 38] : severity === 'medium' ? [245, 158, 11] : [34, 197, 94];
+      doc.setFillColor(sevColor[0], sevColor[1], sevColor[2]);
+      doc.roundedRect(M, y, 35, 7, 2, 2, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(255, 255, 255);
+      doc.text(severity.toUpperCase(), M + 17.5, y + 5, { align: 'center' });
+      
+      var conf = Math.round((r.confidence || 0) * 100);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      doc.setTextColor(80, 80, 80);
+      doc.text('Confidence: ' + conf + '%', M + 45, y + 5);
+      y += 15;
+
+      doc.setDrawColor(200, 200, 200);
+      doc.line(M, y, W - M, y);
+      y += 6;
+
+      var user = getUser();
+      if (user) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text('Farmer: ' + (user.name || '—'), M, y);
+        if (user.location) doc.text('Location: ' + user.location, M + 80, y);
+        y += 10;
+      }
+
+      if (jpegBase64) {
+        try {
+          doc.addImage(jpegBase64, 'JPEG', M, y, 50, 40);
+          doc.setFontSize(8);
+          doc.setTextColor(120, 120, 120);
+          doc.text('Scanned Leaf', M + 25, y + 45, { align: 'center' });
+          y += 55;
+        } catch(e) { console.warn('Image error:', e); }
+      }
+
+      function cleanText(text) {
+        if (!text) return 'No information available.';
+        text = text.replace(/<[^>]*>/g, '');
+        text = text.replace(/[^\w\s\d\.,\-\n]/g, '');
+        text = text.replace(/\n{3,}/g, '\n\n');
+        return text.trim();
+      }
+
+      function addSection(title, content, color) {
+        if (y > 260) { doc.addPage(); y = M; }
+        doc.setFillColor(color[0], color[1], color[2]);
+        doc.rect(M, y, W - M * 2, 7, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.setTextColor(255, 255, 255);
+        doc.text(title, M + 3, y + 5);
+        y += 10;
+        
+        var cleanContent = cleanText(content);
+        var lines = cleanContent.split('\n');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(60, 60, 60);
+        
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i].trim();
+          if (!line) { y += 2; continue; }
+          if (y > 275) { doc.addPage(); y = M; }
+          if (/^\d+[\.\)]/.test(line)) {
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(46, 106, 79);
+          } else {
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(60, 60, 60);
+          }
+          var wrapped = doc.splitTextToSize(line, W - M * 2 - 5);
+          for (var j = 0; j < wrapped.length; j++) {
+            if (y > 275) { doc.addPage(); y = M; }
+            doc.text(wrapped[j], M + 2, y);
+            y += 5;
+          }
+        }
+        y += 5;
+      }
+
+      addSection('DESCRIPTION', r.description, [46, 106, 79]);
+      addSection('TREATMENT PLAN', r.treatment, [185, 28, 28]);
+      addSection('PREVENTION', r.prevention, [27, 68, 50]);
+
+      var pages = doc.internal.getNumberOfPages();
+      for (var p = 1; p <= pages; p++) {
+        doc.setPage(p);
+        doc.setFillColor(46, 106, 79);
+        doc.rect(0, 287, W, 10, 'F');
+        doc.setFontSize(7);
+        doc.setTextColor(200, 200, 200);
+        doc.text('AgroGuard AI - Diagnose. Treat. Save the Harvest.', M, 293);
+        doc.text('Page ' + p + ' of ' + pages, W - M, 293, { align: 'right' });
+      }
+
+      doc.save('AgroGuard_' + disease.replace(/\s+/g, '_') + '.pdf');
+      notify('PDF downloaded successfully!', 'success');
+    } catch(err) {
+      console.error('PDF error:', err);
+      notify('PDF error: ' + err.message, 'error');
+    } finally {
+      btn.innerHTML = originalHtml;
+      btn.disabled = false;
+    }
+  });
+});
+
+document.getElementById('waBtn').addEventListener('click', function() {
+  var r = window._result;
+  if (!r) { notify('Please scan a leaf first.','warning'); return; }
+  var disease = fmtDisease(r.disease_name);
+  var conf = Math.round((r.confidence||0)*100);
+  var sevEmoji = r.severity==='critical'?'🔴':r.severity==='medium'?'🟡':'🟢';
+  var user = getUser();
+  var date = new Date().toLocaleDateString('en-IN');
+  var treat = (r.treatment||'').replace(/<[^>]+>/g,'').replace(/[═━]{2,}/g,'').split('\n').slice(0,5).join('\n');
+  var msg = '🌿 AgroGuard AI Report\n\n📅 Date: ' + date + '\n👨‍🌾 Farmer: ' + (user?.name || 'Guest') + '\n📍 Location: ' + (user?.location || 'India') + '\n\n🍅 Disease: ' + disease + '\n' + sevEmoji + ' Severity: ' + (r.severity||'').toUpperCase() + '\n🎯 Confidence: ' + conf + '%\n\n💊 Treatment:\n' + treat + '\n\nDiagnose. Treat. Save the Harvest.';
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+});
+
+document.getElementById('rescanBtn').addEventListener('click', function() {
+  resultSec.style.display = 'none';
+  document.getElementById('resultActions').style.display = 'none';
+  imageInput.value = '';
+  previewImg.src = ''; previewImg.classList.remove('visible');
+  document.getElementById('dropContent').style.display = '';
+  detectBtn.disabled = true;
+  locationBox.classList.add('hidden');
+  if (_activeTab === 'camera') resetCam();
+  window._result = null; window._imgData = null; _lat = null; _lng = null;
+  document.getElementById('uploadPanel').scrollIntoView({behavior:'smooth'});
+  notify('Ready for new scan!', 'info', 2000);
+});
+
+function updateHomeAuthState(){ updateNavbar(); }
+window.addEventListener('beforeunload', stopCam);
+</script>
+
+<script src="js/gamification.js"></script>
+<script src="js/voice.js"></script>
+<script src="js/profile.js"></script>
+<script src="features.js"></script>
+
+<script>
+(function() {
+    window.switchTab = function(tab) {
+        console.log('Switching to tab:', tab);
+        var tabUpload = document.getElementById('tabUpload');
+        var tabCamera = document.getElementById('tabCamera');
+        var uploadInner = document.getElementById('uploadInner');
+        var cameraPanel = document.getElementById('cameraPanel');
+        if (tabUpload) tabUpload.classList.toggle('active', tab === 'upload');
+        if (tabCamera) tabCamera.classList.toggle('active', tab === 'camera');
+        if (uploadInner) uploadInner.style.display = tab === 'upload' ? '' : 'none';
+        if (cameraPanel) cameraPanel.style.display = tab === 'camera' ? '' : 'none';
+        if (tab === 'camera') {
+            setTimeout(function() {
+                var video = document.getElementById('cameraFeed');
+                if (video && navigator.mediaDevices) {
+                    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                        .then(function(stream) {
+                            video.srcObject = stream;
+                            window._stream = stream;
+                            document.getElementById('captureBtn').disabled = false;
+                            notify('Camera ready!', 'success', 2000);
+                        })
+                        .catch(function(err) {
+                            console.error('Camera error:', err);
+                            notify('Camera not available. Use Upload Photo.', 'error');
+                            window.switchTab('upload');
+                        });
+                }
+            }, 100);
+        } else {
+            if (window._stream) {
+                window._stream.getTracks().forEach(function(t) { t.stop(); });
+                window._stream = null;
+            }
+            var video = document.getElementById('cameraFeed');
+            if (video) video.srcObject = null;
+        }
+    };
+})();
+</script>
+</body>
+</html>

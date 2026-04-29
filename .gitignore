@@ -1,0 +1,63 @@
+# ── AgroGuard AI — .gitignore ─────────────────────────────────────────────────
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.so
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables — NEVER commit this
+.env
+
+# ML Models — too large for git
+*.h5
+*.pkl
+*.pt
+*.pth
+
+# Uploaded images
+server/uploads/
+
+# MongoDB data
+data/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Node (if used)
+node_modules/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Docker volumes
+mongo_data/
+uploads_data/
