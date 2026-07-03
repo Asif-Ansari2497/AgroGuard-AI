@@ -149,10 +149,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        name,
-                        email,
-                        password,
-                        location
+                        name: name,
+                        email: email,
+                        password: password,
+                        location: location || ""
                     })
                 });
 
