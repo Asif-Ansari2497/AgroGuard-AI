@@ -96,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 form.append('username', email);
                 form.append('password', password);
 
-                const res = await fetch(`${BASE_URL}/auth/token`, {
+                const res = await fetch(`https://agroguard-ai-6xil.onrender.com/auth/token`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
@@ -143,7 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.textContent = 'Creating account...';
 
             try {
-                const res = await fetch(`${BASE_URL}/auth/register`, {
+                const res = await fetch(`https://agroguard-ai-6xil.onrender.com/auth/register`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
