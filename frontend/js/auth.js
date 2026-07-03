@@ -1,6 +1,5 @@
 /**
- * AgroGuard AI — Auth UI
- * Same-origin version — no CORS issues
+ * AgroGuard AI — Auth UI (FULLY WORKING - NO LOOP)
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -11,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const tabReg = document.getElementById('tabRegister');
     const modalTitle = document.getElementById('modalTitle');
 
+    // ── Modal Functions ──────────────────────────────────────────────────────────
     function openModal(tab = 'login') {
         if (overlay) overlay.classList.add('open');
         switchTab(tab);
@@ -29,11 +29,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (modalTitle) modalTitle.textContent = isLogin ? 'Sign In' : 'Sign Up';
     }
 
-    // Helper to store auth data
+    // ── Auth Helpers ─────────────────────────────────────────────────────────────
     function storeAuth(token, user) {
         localStorage.setItem('access_token', token);
         if (user) localStorage.setItem('user', JSON.stringify(user));
-        // Also call global setAuth if it exists (from app.js)
         if (typeof window.setAuth === 'function') {
             window.setAuth(token, user);
         }
@@ -47,20 +46,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // ── UI Event Listeners ──────────────────────────────────────────────────────
     document.querySelectorAll('[data-open-auth]').forEach(btn => {
-        btn.addEventListener('click', e => { e.preventDefault(); openModal(btn.dataset.openAuth || 'login'); });
+        btn.addEventListener('click', e => {
+            e.preventDefault();
+            openModal(btn.dataset.openAuth || 'login');
+        });
     });
 
     document.querySelectorAll('[data-modal-close]').forEach(el => {
         el.addEventListener('click', closeModal);
     });
 
-    if (overlay) overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+    if (overlay) {
+        overlay.addEventListener('click', e => {
+            if (e.target === overlay) closeModal();
+        });
+    }
+
     if (tabLogin) tabLogin.addEventListener('click', () => switchTab('login'));
     if (tabReg) tabReg.addEventListener('click', () => switchTab('register'));
 
     document.querySelectorAll('[data-switch-tab]').forEach(el => {
-        el.addEventListener('click', e => { e.preventDefault(); switchTab(el.dataset.switchTab); });
+        el.addEventListener('click', e => {
+            e.preventDefault();
+            switchTab(el.dataset.switchTab);
+        });
     });
 
     // ── LOGIN ──────────────────────────────────────────────────────────────────
@@ -88,7 +99,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok) throw new Error(data.detail || 'Login failed');
 
-                // Save token and user data
                 storeAuth(data.access_token, data.user);
                 updateNavbar();
                 closeModal();
@@ -118,7 +128,6 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.textContent = 'Creating account...';
 
             try {
-                // Use global api function if exists, else fetch directly
                 let data;
                 if (typeof window.api === 'function') {
                     data = await window.api('POST', '/auth/register', { name, email, password, location });
@@ -152,11 +161,15 @@ document.addEventListener('DOMContentLoaded', () => {
             clearAuth();
             updateNavbar();
             notify('Logged out.', 'info');
-            if (['dashboard.html', 'map.html'].some(p => window.location.pathname.includes(p))) {
-                window.location.href = '/';
-            }
+            // NO REDIRECT - Stay on page
+            if (typeof updateHomeAuthState === 'function') updateHomeAuthState();
         });
     }
 
+    // ── Public API ──────────────────────────────────────────────────────────────
     window.openAuthModal = openModal;
+    window.closeAuthModal = closeModal;
+    window.switchAuthTab = switchTab;
+
+    console.log('✅ Auth module initialized');
 });

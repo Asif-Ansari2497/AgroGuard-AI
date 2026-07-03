@@ -1,0 +1,61 @@
+# ── AgroGuard AI — Docker Compose ─────────────────────────────────────────────
+version: "3.9"
+
+services:
+
+  # ── MongoDB ─────────────────────────────────────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: agroguard-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: agroguard
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI Backend ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: agroguard-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      MONGO_URI:    "mongodb://mongo:27017"
+      DATABASE_NAME: agroguard
+      SECRET_KEY:   "change-me-in-production-please"
+      UPLOAD_DIR:   "/app/uploads"
+      MODEL_PATH:   "/app/models/tomato_disease_model.h5"
+      ALLOWED_ORIGINS: "*"
+    volumes:
+      - ./server/models:/app/models
+      - uploads_data:/app/uploads
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # ── Nginx (Frontend + Reverse Proxy) ─────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: agroguard-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
+  uploads_data:

@@ -6,7 +6,6 @@
   <title>AgroGuard AI — Crop Disease Detection</title>
   <link rel="stylesheet" href="css/style.css"/>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
-  <!-- jsPDF — MUST be in head so it loads before any button click -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     .features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem;padding:4rem 0}
@@ -25,13 +24,11 @@
     .step p{font-size:.82rem}
     @media(max-width:768px){.features-grid{grid-template-columns:1fr}.steps{flex-direction:column;gap:1.5rem}.steps::before{display:none}}
 
-    /* ── Scan Tabs ─────────────────────────────────────── */
     .scan-tabs{display:flex;gap:.5rem;margin-bottom:1rem}
     .scan-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:.4rem;padding:.55rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text-muted);font-size:.82rem;font-weight:600;cursor:pointer;transition:all .2s}
     .scan-tab.active{background:var(--earth);border-color:var(--leaf);color:var(--leaf)}
     .scan-tab:hover{border-color:var(--leaf);color:var(--leaf)}
 
-    /* ── Camera ─────────────────────────────────────────── */
     #cameraPanel{display:none}
     .cam-wrap{position:relative;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:4/3;margin-bottom:.75rem}
     #cameraFeed{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1)}
@@ -44,13 +41,27 @@
     #capturePreviewWrap{display:none;margin-top:.5rem}
     #capturePreview{width:100%;border-radius:10px;border:1px solid var(--border)}
 
-    /* ── Result Action Buttons ─────────────────────────── */
     .result-actions{display:none;flex-wrap:wrap;gap:.6rem;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)}
     .rab{display:inline-flex;align-items:center;gap:.4rem;padding:.5rem .9rem;border-radius:8px;font-size:.84rem;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .2s;background:none}
     .rab-pdf{border-color:#dc2626;color:#dc2626}.rab-pdf:hover{background:rgba(220,38,38,.12)}
     .rab-wa{border-color:#25D366;color:#25D366}.rab-wa:hover{background:rgba(37,211,102,.12)}
     .rab-rescan{border-color:var(--leaf);color:var(--leaf)}.rab-rescan:hover{background:rgba(90,158,47,.12)}
+    
+    /* ── Leaf Validation Alert ── */
+    .leaf-alert {
+      background: rgba(220, 38, 38, 0.1);
+      border: 1px solid #dc2626;
+      color: #dc2626;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      display: none;
+      margin-top: 0.5rem;
+    }
+    .leaf-alert.show { display: block; }
   </style>
+     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 
@@ -71,11 +82,11 @@
     <button id="navLoginBtn" class="btn btn-primary btn-sm" data-open-auth="login">
       <i class="fa fa-sign-in-alt"></i> <span data-i18n="login">Login</span>
     </button>
-    <div id="navUserChip" class="user-chip hidden" style="cursor:pointer;" title="View profile">
+    <div id="navUserChip" class="user-chip hidden" onclick="window.location.href='/profile.html'" style="cursor:pointer;" title="View profile">
       <div id="navAvatar" class="user-avatar">U</div>
       <span id="navUserName">User</span>
       <i class="fa fa-chevron-down" style="font-size:10px;color:var(--text-muted);"></i>
-      <button id="navLogoutBtn" class="btn btn-ghost btn-sm" style="padding:.2rem .5rem;margin-left:4px;" data-i18n="logout">Logout</button>
+      <button id="navLogoutBtn" class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); localStorage.clear(); window.location.href='/';" style="padding:.2rem .5rem;margin-left:4px;" data-i18n="logout">Logout</button>
     </div>
   </div>
 </nav>
@@ -138,6 +149,12 @@
         <button id="captureBtn" disabled><i class="fa fa-camera"></i> Capture Leaf Photo</button>
         <button id="retakeBtn"><i class="fa fa-redo"></i> Retake Photo</button>
         <div id="capturePreviewWrap"><img id="capturePreview" alt="captured"/></div>
+      </div>
+
+      <!-- Leaf Validation Alert -->
+      <div id="leafAlert" class="leaf-alert">
+        <i class="fa fa-exclamation-circle"></i> 
+        <span id="leafAlertMsg">⚠️ This doesn't look like a plant leaf. Please upload a clear photo of a plant leaf.</span>
       </div>
 
       <div id="locationBox" class="hidden" style="margin-top:1rem;">
@@ -255,7 +272,7 @@
 <script src="js/auth.js"></script>
 <script>
 /* ═══════════════════════════════════════════════════════
-   AgroGuard AI — Main Page (Camera & Detection Only)
+   AgroGuard AI — WITH LEAF VALIDATION
 ═══════════════════════════════════════════════════════ */
 
 window._result = null;
@@ -274,134 +291,384 @@ var detectBtn = document.getElementById('detectBtn');
 var resultSec = document.getElementById('resultSection');
 var loadingOvly = document.getElementById('loadingOverlay');
 var locationBox = document.getElementById('locationBox');
+var leafAlert = document.getElementById('leafAlert');
+var leafAlertMsg = document.getElementById('leafAlertMsg');
 
+// ========================================
+// LEAF VALIDATION FUNCTION - NEW!
+// ========================================
+function isLeafImage(imageData, callback) {
+    // Create a canvas to analyze the image
+    var img = new Image();
+    img.onload = function() {
+        var canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        var imageDataObj = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var data = imageDataObj.data;
+        
+        var totalPixels = data.length / 4;
+        var greenCount = 0;
+        var brownCount = 0;
+        var whiteCount = 0;
+        var skinCount = 0;
+        var totalColorCount = 0;
+        
+        // Sample pixels (skip every 10th pixel for performance)
+        for (var i = 0; i < data.length; i += 40) {
+            var r = data[i];
+            var g = data[i + 1];
+            var b = data[i + 2];
+            totalColorCount++;
+            
+            // Check for green (leaf color)
+            if (g > r && g > b && g > 50) {
+                greenCount++;
+            }
+            
+            // Check for brown (dried leaf/soil)
+            if (r > 100 && g > 50 && g < 150 && b < 100) {
+                brownCount++;
+            }
+            
+            // Check for skin tones (face)
+            if (r > 150 && g > 80 && g < 200 && b > 60 && b < 170) {
+                skinCount++;
+            }
+            
+            // Check for white/very bright (overexposed)
+            if (r > 220 && g > 220 && b > 220) {
+                whiteCount++;
+            }
+        }
+        
+        var greenPercent = (greenCount / totalColorCount) * 100;
+        var skinPercent = (skinCount / totalColorCount) * 100;
+        var whitePercent = (whiteCount / totalColorCount) * 100;
+        var brownPercent = (brownCount / totalColorCount) * 100;
+        
+        console.log("🌿 Leaf Analysis:", {
+            greenPercent: greenPercent.toFixed(1) + '%',
+            skinPercent: skinPercent.toFixed(1) + '%',
+            whitePercent: whitePercent.toFixed(1) + '%',
+            brownPercent: brownPercent.toFixed(1) + '%'
+        });
+        
+        // 🟢 LEAF DETECTION LOGIC:
+        // 1. If MORE than 30% green + brown → LEAF ✅
+        // 2. If MORE than 30% skin tones → FACE ❌
+        // 3. If MORE than 70% white → OVEREXPOSED ❌
+        // 4. If LESS than 5% green AND less than 5% brown → NOT LEAF ❌
+        
+        var leafScore = greenPercent + brownPercent;
+        var isLeaf = false;
+        var reason = '';
+        
+        if (skinPercent > 30) {
+            isLeaf = false;
+            reason = 'This looks like a human face. Please upload a plant leaf.';
+        } else if (whitePercent > 70) {
+            isLeaf = false;
+            reason = 'Image is too bright/overexposed. Please take a clearer photo.';
+        } else if (leafScore > 20) {
+            isLeaf = true;
+            reason = '✅ Leaf detected!';
+        } else if (greenPercent > 10) {
+            isLeaf = true;
+            reason = '✅ Some green detected, likely a leaf.';
+        } else {
+            isLeaf = false;
+            reason = '⚠️ No leaf detected. Please upload a clear photo of a plant leaf.';
+        }
+        
+        console.log("🌿 Leaf Detection Result:", isLeaf ? "✅ LEAF" : "❌ NOT LEAF", reason);
+        callback(isLeaf, reason);
+    };
+    img.onerror = function() {
+        callback(false, 'Could not load image for analysis.');
+    };
+    img.src = imageData;
+}
+
+// ========================================
+// SWITCH TAB
+// ========================================
 window.switchTab = function(tab) {
   _activeTab = tab;
+  
   document.getElementById('tabUpload').classList.toggle('active', tab === 'upload');
   document.getElementById('tabCamera').classList.toggle('active', tab === 'camera');
-  document.getElementById('uploadInner').style.display = tab === 'upload' ? '' : 'none';
-  document.getElementById('cameraPanel').style.display = tab === 'camera' ? '' : 'none';
-  if (tab === 'camera') startCam();
-  else stopCam();
+  document.getElementById('uploadInner').style.display = tab === 'upload' ? 'block' : 'none';
+  document.getElementById('cameraPanel').style.display = tab === 'camera' ? 'block' : 'none';
+  
+  if (tab === 'camera') {
+    setTimeout(function() {
+      startCamera();
+    }, 200);
+  } else {
+    stopCamera();
+  }
+  
+  // Hide leaf alert when switching tabs
+  leafAlert.classList.remove('show');
 };
 
-function startCam() {
-  resetCam();
+// ========================================
+// START CAMERA
+// ========================================
+function startCamera() {
+  var video = document.getElementById('cameraFeed');
+  var captureBtn = document.getElementById('captureBtn');
+  
+  if (_stream) {
+    _stream.getTracks().forEach(function(t) { t.stop(); });
+    _stream = null;
+  }
+  video.srcObject = null;
+  video.style.display = 'block';
+  captureBtn.disabled = true;
+  captureBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Loading camera...';
+  
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    notify('Camera not supported.', 'warning');
+    notify('Camera not supported on this device.', 'warning');
     switchTab('upload');
     return;
   }
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } })
-    .then(function(s) {
-      _stream = s;
-      document.getElementById('cameraFeed').srcObject = s;
-      document.getElementById('captureBtn').disabled = false;
-      notify('Camera ready!', 'success', 3000);
-    })
-    .catch(function(err) {
-      notify('Camera not available.', 'warning');
-      switchTab('upload');
-    });
+  
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'environment' }
+  })
+  .then(function(stream) {
+    _stream = stream;
+    video.srcObject = stream;
+    video.play().catch(function(e) {});
+    captureBtn.disabled = false;
+    captureBtn.innerHTML = '<i class="fa fa-camera"></i> Capture Leaf Photo';
+    console.log('✅ Camera is LIVE!');
+    notify('📷 Camera ready! Capture a leaf photo.', 'success', 2000);
+  })
+  .catch(function(err) {
+    console.error('❌ Camera error:', err);
+    notify('❌ Camera access denied. Please allow camera permission.', 'error');
+    switchTab('upload');
+  });
 }
 
-function stopCam() {
-  if (_stream) { _stream.getTracks().forEach(function(t){ t.stop(); }); _stream = null; }
-  var v = document.getElementById('cameraFeed');
-  if (v) v.srcObject = null;
+// ========================================
+// STOP CAMERA
+// ========================================
+function stopCamera() {
+  if (_stream) {
+    _stream.getTracks().forEach(function(t) { t.stop(); });
+    _stream = null;
+  }
+  var video = document.getElementById('cameraFeed');
+  if (video) {
+    video.srcObject = null;
+    video.style.display = 'block';
+  }
 }
 
-function resetCam() {
-  _blob = null;
-  var wrap = document.getElementById('capturePreviewWrap');
-  var feed = document.getElementById('cameraFeed');
-  var cbtn = document.getElementById('captureBtn');
-  var rbtn = document.getElementById('retakeBtn');
-  if (wrap) wrap.style.display = 'none';
-  if (feed) feed.style.display = 'block';
-  if (cbtn) { cbtn.innerHTML = '<i class="fa fa-camera"></i> Capture'; cbtn.disabled = true; }
-  if (rbtn) rbtn.style.display = 'none';
-  detectBtn.disabled = true;
-}
-
+// ========================================
+// CAPTURE - WITH LEAF VALIDATION
+// ========================================
 document.getElementById('captureBtn').addEventListener('click', function() {
   var video = document.getElementById('cameraFeed');
   var canvas = document.getElementById('canvasHidden');
   var preview = document.getElementById('capturePreview');
   var wrap = document.getElementById('capturePreviewWrap');
-  if (!_stream || !video.videoWidth) { notify('Camera not ready.', 'warning'); return; }
+  
+  if (!_stream || !video.videoWidth) {
+    notify('Camera not ready. Please wait.', 'warning');
+    return;
+  }
+  
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   var ctx = canvas.getContext('2d');
-  ctx.save(); ctx.scale(-1,1); ctx.drawImage(video, -canvas.width, 0); ctx.restore();
+  ctx.save();
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, -canvas.width, 0);
+  ctx.restore();
+  
   var dataUrl = canvas.toDataURL('image/jpeg', 0.92);
   preview.src = dataUrl;
   wrap.style.display = 'block';
   video.style.display = 'none';
   window._imgData = dataUrl;
-  canvas.toBlob(function(b){
+  
+  canvas.toBlob(function(b) {
     _blob = b;
     document.getElementById('captureBtn').innerHTML = '<i class="fa fa-check"></i> Captured!';
+    document.getElementById('captureBtn').disabled = true;
     document.getElementById('retakeBtn').style.display = 'flex';
-    detectBtn.disabled = false;
-    if (isLoggedIn()) locationBox.classList.remove('hidden');
-    notify('Photo captured! Click Detect Disease.', 'success', 3000);
+    
+    // 🟢 LEAF VALIDATION ON CAPTURE
+    isLeafImage(dataUrl, function(isLeaf, reason) {
+      if (isLeaf) {
+        detectBtn.disabled = false;
+        if (isLoggedIn()) locationBox.classList.remove('hidden');
+        leafAlert.classList.remove('show');
+        notify('✅ Leaf detected! Click "Detect Disease".', 'success', 2000);
+      } else {
+        detectBtn.disabled = true;
+        leafAlertMsg.textContent = '⚠️ ' + reason;
+        leafAlert.classList.add('show');
+        notify('❌ ' + reason, 'error', 4000);
+      }
+    });
   }, 'image/jpeg', 0.92);
 });
 
+// ========================================
+// RETAKE
+// ========================================
 document.getElementById('retakeBtn').addEventListener('click', function() {
-  resetCam();
-  document.getElementById('cameraFeed').style.display = 'block';
+  var video = document.getElementById('cameraFeed');
+  var wrap = document.getElementById('capturePreviewWrap');
+  var captureBtn = document.getElementById('captureBtn');
+  
+  wrap.style.display = 'none';
+  video.style.display = 'block';
+  captureBtn.innerHTML = '<i class="fa fa-camera"></i> Capture Leaf Photo';
+  captureBtn.disabled = false;
+  this.style.display = 'none';
+  detectBtn.disabled = true;
+  _blob = null;
+  window._imgData = null;
   locationBox.classList.add('hidden');
+  leafAlert.classList.remove('show');
+  notify('📷 Ready to retake!', 'info', 1500);
 });
 
-document.getElementById('heroDetectBtn').addEventListener('click', function() {
-  if (!isLoggedIn()) { window.openAuthModal && window.openAuthModal('register'); }
-  else { document.getElementById('uploadPanel').scrollIntoView({behavior:'smooth'}); imageInput.click(); }
+// ========================================
+// FILE UPLOAD - WITH LEAF VALIDATION
+// ========================================
+imageInput.addEventListener('change', function() {
+  if (imageInput.files[0]) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var dataUrl = e.target.result;
+      previewImg.src = dataUrl;
+      previewImg.classList.add('visible');
+      document.getElementById('dropContent').style.display = 'none';
+      window._imgData = dataUrl;
+      
+      // 🟢 LEAF VALIDATION ON UPLOAD
+      isLeafImage(dataUrl, function(isLeaf, reason) {
+        if (isLeaf) {
+          detectBtn.disabled = false;
+          if (isLoggedIn()) locationBox.classList.remove('hidden');
+          leafAlert.classList.remove('show');
+          notify('✅ Leaf detected! Click "Detect Disease".', 'success', 2000);
+        } else {
+          detectBtn.disabled = true;
+          leafAlertMsg.textContent = '⚠️ ' + reason;
+          leafAlert.classList.add('show');
+          notify('❌ ' + reason, 'error', 4000);
+        }
+      });
+    };
+    reader.readAsDataURL(imageInput.files[0]);
+  }
 });
 
-dropZone.addEventListener('dragover', function(e){ e.preventDefault(); dropZone.classList.add('dragover'); });
-dropZone.addEventListener('dragleave', function(){ dropZone.classList.remove('dragover'); });
-dropZone.addEventListener('drop', function(e){
-  e.preventDefault(); dropZone.classList.remove('dragover');
+// ========================================
+// DRAG & DROP - WITH LEAF VALIDATION
+// ========================================
+dropZone.addEventListener('dragover', function(e) {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+dropZone.addEventListener('dragleave', function() {
+  dropZone.classList.remove('dragover');
+});
+dropZone.addEventListener('drop', function(e) {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
   var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-  if (f) handleFile(f);
-});
-imageInput.addEventListener('change', function(){
-  if (imageInput.files[0]) handleFile(imageInput.files[0]);
+  if (f) {
+    var reader = new FileReader();
+    reader.onload = function(e2) {
+      var dataUrl = e2.target.result;
+      previewImg.src = dataUrl;
+      previewImg.classList.add('visible');
+      document.getElementById('dropContent').style.display = 'none';
+      window._imgData = dataUrl;
+      
+      // 🟢 LEAF VALIDATION ON DROP
+      isLeafImage(dataUrl, function(isLeaf, reason) {
+        if (isLeaf) {
+          detectBtn.disabled = false;
+          if (isLoggedIn()) locationBox.classList.remove('hidden');
+          leafAlert.classList.remove('show');
+          notify('✅ Leaf detected! Click "Detect Disease".', 'success', 2000);
+        } else {
+          detectBtn.disabled = true;
+          leafAlertMsg.textContent = '⚠️ ' + reason;
+          leafAlert.classList.add('show');
+          notify('❌ ' + reason, 'error', 4000);
+        }
+      });
+    };
+    reader.readAsDataURL(f);
+  }
 });
 
-function handleFile(file) {
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    previewImg.src = e.target.result;
-    previewImg.classList.add('visible');
-    document.getElementById('dropContent').style.display = 'none';
-    window._imgData = e.target.result;
-  };
-  reader.readAsDataURL(file);
-  detectBtn.disabled = false;
-  if (isLoggedIn()) locationBox.classList.remove('hidden');
-}
+// ========================================
+// HERO DETECT BUTTON
+// ========================================
+document.getElementById('heroDetectBtn').addEventListener('click', function() {
+  if (!isLoggedIn()) {
+    window.openAuthModal && window.openAuthModal('register');
+  } else {
+    document.getElementById('uploadPanel').scrollIntoView({behavior:'smooth'});
+    imageInput.click();
+  }
+});
 
+// ========================================
+// LOCATION
+// ========================================
 document.getElementById('shareLocYes').addEventListener('click', function() {
   locationBox.classList.add('hidden');
-  getUserLocation().then(function(loc){
-    if (loc) { _lat = loc.lat; _lng = loc.lng; notify('Location shared!', 'success', 2500); }
-    else notify('Could not get location.', 'warning');
-  });
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      function(pos) { _lat = pos.coords.latitude; _lng = pos.coords.longitude; notify('Location shared!', 'success', 2000); },
+      function() { notify('Could not get location.', 'warning'); }
+    );
+  }
 });
 document.getElementById('shareLocNo').addEventListener('click', function() {
-  locationBox.classList.add('hidden'); _lat = null; _lng = null;
+  locationBox.classList.add('hidden');
+  _lat = null;
+  _lng = null;
 });
 
+// ========================================
+// DETECT DISEASE
+// ========================================
 detectBtn.addEventListener('click', async function() {
-  if (!isLoggedIn()) { window.openAuthModal && window.openAuthModal('login'); return; }
-  var file = (_activeTab === 'camera' && _blob) ? new File([_blob], 'leaf.jpg', {type:'image/jpeg'}) : imageInput.files[0];
-  if (!file) { notify('Please select or capture a leaf photo first.', 'error'); return; }
-
+  if (!isLoggedIn()) {
+    window.openAuthModal && window.openAuthModal('login');
+    return;
+  }
+  
+  var file;
+  if (_activeTab === 'camera' && _blob) {
+    file = new File([_blob], 'leaf.jpg', {type: 'image/jpeg'});
+  } else if (imageInput.files[0]) {
+    file = imageInput.files[0];
+  } else {
+    notify('Please select or capture a leaf photo first.', 'error');
+    return;
+  }
+  
   loadingOvly.classList.add('active');
   detectBtn.disabled = true;
+  
   try {
     var fd = new FormData();
     fd.append('file', file);
@@ -410,14 +677,16 @@ detectBtn.addEventListener('click', async function() {
     if (_lng) fd.append('longitude', _lng);
     var user = getUser();
     if (user && user.location) fd.append('location_name', user.location);
+    
     var result = await api('POST', '/predict/', fd, true);
+    
     if (typeof window.showResult === 'function') {
       window.showResult(result);
       window._result = result;
     } else {
       window._result = result;
       resultSec.style.display = 'block';
-      resultSec.scrollIntoView({behavior:'smooth'});
+      resultSec.scrollIntoView({behavior: 'smooth'});
       document.getElementById('resultDisease').textContent = fmtDisease(result.disease_name);
       document.getElementById('resultSeverity').textContent = result.severity;
       document.getElementById('tab-description').textContent = result.description;
@@ -425,9 +694,10 @@ detectBtn.addEventListener('click', async function() {
       document.getElementById('tab-prevention').textContent = result.prevention;
       document.getElementById('resultActions').style.display = 'flex';
     }
-    notify('Scan complete!', 'success');
-  } catch(err) { notify(err.message, 'error'); }
-  finally {
+    notify('✅ Scan complete!', 'success');
+  } catch(err) {
+    notify(err.message, 'error');
+  } finally {
     loadingOvly.classList.remove('active');
     detectBtn.disabled = false;
   }
@@ -435,257 +705,272 @@ detectBtn.addEventListener('click', async function() {
 
 function fmtDisease(name) {
   if (!name) return 'Unknown';
-  return name.replace(/^Tomato_{1,2}/,'').replace(/_/g,' ').trim();
+  return name.replace(/^Tomato_{1,2}/, '').replace(/_/g, ' ').trim();
 }
 
-// ==================== FIXED PDF FUNCTION ====================
-document.getElementById('pdfBtn').addEventListener('click', function() {
-  var r = window._result;
-  if (!r) { notify('Please scan a leaf first.', 'warning'); return; }
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
+function notify(message, type, duration) {
+  duration = duration || 3000;
+  var alertArea = document.getElementById('alertArea');
+  if (!alertArea) return;
+  var colors = {
+    success: '#22c55e',
+    error: '#dc2626',
+    warning: '#f59e0b',
+    info: '#3b82f6'
+  };
+  alertArea.innerHTML = '<div style="background:' + (colors[type] || '#3b82f6') + '22;border-left:4px solid ' + (colors[type] || '#3b82f6') + ';padding:0.75rem 1rem;border-radius:8px;font-size:0.85rem;">' + message + '</div>';
+  setTimeout(function() { alertArea.innerHTML = ''; }, duration);
+}
 
-  var jsPDFLib = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
-  if (!jsPDFLib) { notify('PDF library not ready.', 'error'); return; }
+function isLoggedIn() {
+  return !!localStorage.getItem('user');
+}
 
-  var btn = this;
-  var originalHtml = btn.innerHTML;
-  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Generating...';
-  btn.disabled = true;
-
-  function toJpegBase64(dataUrl, callback) {
-    if (!dataUrl) return callback(null);
-    var img = new Image();
-    img.onload = function() {
-      var canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      canvas.getContext('2d').drawImage(img, 0, 0);
-      var base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-      callback(base64);
-    };
-    img.onerror = function() { callback(null); };
-    img.src = dataUrl;
+function getUser() {
+  try {
+    return JSON.parse(localStorage.getItem('user'));
+  } catch(e) {
+    return null;
   }
+}
 
-  toJpegBase64(window._imgData, function(jpegBase64) {
-    try {
-      var doc = new jsPDFLib({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      var W = 210, M = 15;
-      var y = M;
-
-      // Header
-      doc.setFillColor(46, 106, 79);
-      doc.rect(0, 0, W, 25, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(18);
-      doc.setTextColor(255, 255, 255);
-      doc.text('AgroGuard AI', M, 12);
-      doc.setFontSize(10);
-      doc.setTextColor(200, 230, 200);
-      doc.text('AI-Powered Crop Disease Detection Report', M, 20);
-      
-      var dt = new Date().toLocaleDateString('en-IN');
-      doc.setFontSize(9);
-      doc.setTextColor(200, 200, 200);
-      doc.text(dt, W - M, 12, { align: 'right' });
-      y = 35;
-
-      // Disease name
-      var disease = (r.disease_name || 'Unknown').replace(/Tomato_*/g, '').replace(/_/g, ' ');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(22);
-      doc.setTextColor(46, 106, 79);
-      doc.text(disease, M, y);
-      y += 8;
-
-      // Severity
-      var severity = r.severity || 'unknown';
-      var sevColor = severity === 'critical' ? [220, 38, 38] : severity === 'medium' ? [245, 158, 11] : [34, 197, 94];
-      doc.setFillColor(sevColor[0], sevColor[1], sevColor[2]);
-      doc.roundedRect(M, y, 35, 7, 2, 2, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.setTextColor(255, 255, 255);
-      doc.text(severity.toUpperCase(), M + 17.5, y + 5, { align: 'center' });
-      
-      var conf = Math.round((r.confidence || 0) * 100);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(11);
-      doc.setTextColor(80, 80, 80);
-      doc.text('Confidence: ' + conf + '%', M + 45, y + 5);
-      y += 15;
-
-      doc.setDrawColor(200, 200, 200);
-      doc.line(M, y, W - M, y);
-      y += 6;
-
-      var user = getUser();
-      if (user) {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(10);
-        doc.setTextColor(100, 100, 100);
-        doc.text('Farmer: ' + (user.name || '—'), M, y);
-        if (user.location) doc.text('Location: ' + user.location, M + 80, y);
-        y += 10;
-      }
-
-      if (jpegBase64) {
-        try {
-          doc.addImage(jpegBase64, 'JPEG', M, y, 50, 40);
-          doc.setFontSize(8);
-          doc.setTextColor(120, 120, 120);
-          doc.text('Scanned Leaf', M + 25, y + 45, { align: 'center' });
-          y += 55;
-        } catch(e) { console.warn('Image error:', e); }
-      }
-
-      function cleanText(text) {
-        if (!text) return 'No information available.';
-        text = text.replace(/<[^>]*>/g, '');
-        text = text.replace(/[^\w\s\d\.,\-\n]/g, '');
-        text = text.replace(/\n{3,}/g, '\n\n');
-        return text.trim();
-      }
-
-      function addSection(title, content, color) {
-        if (y > 260) { doc.addPage(); y = M; }
-        doc.setFillColor(color[0], color[1], color[2]);
-        doc.rect(M, y, W - M * 2, 7, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.setTextColor(255, 255, 255);
-        doc.text(title, M + 3, y + 5);
-        y += 10;
-        
-        var cleanContent = cleanText(content);
-        var lines = cleanContent.split('\n');
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(60, 60, 60);
-        
-        for (var i = 0; i < lines.length; i++) {
-          var line = lines[i].trim();
-          if (!line) { y += 2; continue; }
-          if (y > 275) { doc.addPage(); y = M; }
-          if (/^\d+[\.\)]/.test(line)) {
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(46, 106, 79);
-          } else {
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(60, 60, 60);
-          }
-          var wrapped = doc.splitTextToSize(line, W - M * 2 - 5);
-          for (var j = 0; j < wrapped.length; j++) {
-            if (y > 275) { doc.addPage(); y = M; }
-            doc.text(wrapped[j], M + 2, y);
-            y += 5;
-          }
-        }
-        y += 5;
-      }
-
-      addSection('DESCRIPTION', r.description, [46, 106, 79]);
-      addSection('TREATMENT PLAN', r.treatment, [185, 28, 28]);
-      addSection('PREVENTION', r.prevention, [27, 68, 50]);
-
-      var pages = doc.internal.getNumberOfPages();
-      for (var p = 1; p <= pages; p++) {
-        doc.setPage(p);
-        doc.setFillColor(46, 106, 79);
-        doc.rect(0, 287, W, 10, 'F');
-        doc.setFontSize(7);
-        doc.setTextColor(200, 200, 200);
-        doc.text('AgroGuard AI - Diagnose. Treat. Save the Harvest.', M, 293);
-        doc.text('Page ' + p + ' of ' + pages, W - M, 293, { align: 'right' });
-      }
-
-      doc.save('AgroGuard_' + disease.replace(/\s+/g, '_') + '.pdf');
-      notify('PDF downloaded successfully!', 'success');
-    } catch(err) {
-      console.error('PDF error:', err);
-      notify('PDF error: ' + err.message, 'error');
-    } finally {
-      btn.innerHTML = originalHtml;
-      btn.disabled = false;
+function api(method, url, body, isFormData) {
+  return new Promise(function(resolve, reject) {
+    var xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+    if (!isFormData) {
+      xhr.setRequestHeader('Content-Type', 'application/json');
     }
+    var token = localStorage.getItem('token');
+    if (token) {
+      xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+    }
+    xhr.onload = function() {
+      try {
+        var data = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data);
+        } else {
+          reject(data);
+        }
+      } catch(e) {
+        reject({ message: 'Server error' });
+      }
+    };
+    xhr.onerror = function() {
+      reject({ message: 'Network error' });
+    };
+    xhr.send(body);
   });
-});
+}
 
-document.getElementById('waBtn').addEventListener('click', function() {
-  var r = window._result;
-  if (!r) { notify('Please scan a leaf first.','warning'); return; }
-  var disease = fmtDisease(r.disease_name);
-  var conf = Math.round((r.confidence||0)*100);
-  var sevEmoji = r.severity==='critical'?'🔴':r.severity==='medium'?'🟡':'🟢';
-  var user = getUser();
-  var date = new Date().toLocaleDateString('en-IN');
-  var treat = (r.treatment||'').replace(/<[^>]+>/g,'').replace(/[═━]{2,}/g,'').split('\n').slice(0,5).join('\n');
-  var msg = '🌿 AgroGuard AI Report\n\n📅 Date: ' + date + '\n👨‍🌾 Farmer: ' + (user?.name || 'Guest') + '\n📍 Location: ' + (user?.location || 'India') + '\n\n🍅 Disease: ' + disease + '\n' + sevEmoji + ' Severity: ' + (r.severity||'').toUpperCase() + '\n🎯 Confidence: ' + conf + '%\n\n💊 Treatment:\n' + treat + '\n\nDiagnose. Treat. Save the Harvest.';
-  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
-});
-
+// ========================================
+// RESCAN
+// ========================================
 document.getElementById('rescanBtn').addEventListener('click', function() {
   resultSec.style.display = 'none';
   document.getElementById('resultActions').style.display = 'none';
   imageInput.value = '';
-  previewImg.src = ''; previewImg.classList.remove('visible');
+  previewImg.src = '';
+  previewImg.classList.remove('visible');
   document.getElementById('dropContent').style.display = '';
   detectBtn.disabled = true;
   locationBox.classList.add('hidden');
-  if (_activeTab === 'camera') resetCam();
-  window._result = null; window._imgData = null; _lat = null; _lng = null;
-  document.getElementById('uploadPanel').scrollIntoView({behavior:'smooth'});
-  notify('Ready for new scan!', 'info', 2000);
+  leafAlert.classList.remove('show');
+  if (_activeTab === 'camera') {
+    var video = document.getElementById('cameraFeed');
+    var wrap = document.getElementById('capturePreviewWrap');
+    var captureBtn = document.getElementById('captureBtn');
+    var retakeBtn = document.getElementById('retakeBtn');
+    wrap.style.display = 'none';
+    video.style.display = 'block';
+    captureBtn.innerHTML = '<i class="fa fa-camera"></i> Capture Leaf Photo';
+    captureBtn.disabled = true;
+    retakeBtn.style.display = 'none';
+    startCamera();
+  }
+  window._result = null;
+  window._imgData = null;
+  _lat = null;
+  _lng = null;
+  document.getElementById('uploadPanel').scrollIntoView({behavior: 'smooth'});
+  notify('Ready for new scan!', 'info', 1500);
 });
 
-function updateHomeAuthState(){ updateNavbar(); }
-window.addEventListener('beforeunload', stopCam);
+// ========================================
+// PDF & WHATSAPP BUTTONS (keeping the existing ones)
+// ========================================
+// ============================================
+// 📄 PDF GENERATION - AGROGUARD AI
+// ============================================
+
+function generateAgroGuardPDF(result) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = 210;
+    let y = 20;
+    
+    // 🔥 CLEAN DATA
+    const disease = cleanText(result.disease) || 'Unknown Disease';
+    const description = cleanText(result.description) || '';
+    const treatment = cleanText(result.treatment) || '';
+    const prevention = cleanText(result.prevention) || '';
+    const confidence = result.confidence ? (result.confidence * 100).toFixed(1) + '%' : 'N/A';
+    const severity = result.severity || 'Unknown';
+    const farmerName = result.farmer_name || localStorage.getItem('userName') || 'Farmer';
+    
+    // ===== HEADER: Date =====
+    doc.setFontSize(11);
+    doc.setTextColor(100, 100, 100);
+    doc.text(new Date().toLocaleDateString('en-IN'), pageWidth - 30, y);
+    y += 10;
+    
+    // ===== TITLE: Disease Name =====
+    doc.setFontSize(28);
+    doc.setTextColor(0, 0, 0);
+    doc.text(disease, 20, y);
+    y += 12;
+    
+    // ===== SEVERITY BADGE =====
+    const severityColors = {
+        'low': [0, 128, 0],
+        'medium': [255, 165, 0],
+        'high': [255, 0, 0],
+        'critical': [200, 0, 0]
+    };
+    const color = severityColors[severity.toLowerCase()] || [0, 0, 0];
+    doc.setFontSize(14);
+    doc.setTextColor(color[0], color[1], color[2]);
+    doc.text(severity.toUpperCase(), 20, y);
+    y += 8;
+    
+    // ===== CONFIDENCE =====
+    doc.setFontSize(12);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Confidence: ${confidence}`, 20, y);
+    y += 8;
+    
+    // ===== FARMER NAME =====
+    doc.setFontSize(11);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`Farmer: ${farmerName}`, 20, y);
+    y += 12;
+    
+    // ===== SCANNED LEAF IMAGE (if available) =====
+    if (result.imageData) {
+        try {
+            const img = new Image();
+            img.src = result.imageData;
+            doc.addImage(result.imageData, 'JPEG', 60, y, 90, 70);
+            y += 75;
+        } catch(e) {
+            console.log('Image not available');
+        }
+    }
+    
+    // ===== DIVIDER =====
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, y, pageWidth - 20, y);
+    y += 8;
+    
+    // ===== DESCRIPTION =====
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text('DESCRIPTION', 20, y);
+    y += 8;
+    
+    doc.setFontSize(11);
+    doc.setTextColor(50, 50, 50);
+    const descLines = doc.splitTextToSize(description, 170);
+    doc.text(descLines, 20, y);
+    y += (descLines.length * 5) + 10;
+    
+    // ===== SYMPTOMS (if available) =====
+    if (result.symptoms) {
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.text('SYMPTOMS', 20, y);
+        y += 8;
+        doc.setFontSize(11);
+        doc.setTextColor(50, 50, 50);
+        const symLines = doc.splitTextToSize(cleanText(result.symptoms), 170);
+        doc.text(symLines, 20, y);
+        y += (symLines.length * 5) + 10;
+    }
+    
+    // ===== TREATMENT =====
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text('TREATMENT PLAN', 20, y);
+    y += 8;
+    
+    doc.setFontSize(11);
+    doc.setTextColor(50, 50, 50);
+    const treatLines = doc.splitTextToSize(treatment, 170);
+    doc.text(treatLines, 20, y);
+    y += (treatLines.length * 5) + 10;
+    
+    // ===== CHECK IF NEW PAGE NEEDED =====
+    if (y > 250) {
+        doc.addPage();
+        y = 20;
+    }
+    
+    // ===== PREVENTION =====
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text('PREVENTION', 20, y);
+    y += 8;
+    
+    doc.setFontSize(11);
+    doc.setTextColor(50, 50, 50);
+    const prevLines = doc.splitTextToSize(prevention, 170);
+    doc.text(prevLines, 20, y);
+    y += (prevLines.length * 5) + 10;
+    
+    // ===== FOOTER =====
+    y = 275;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, y, pageWidth - 20, y);
+    y += 5;
+    
+    doc.setFontSize(9);
+    doc.setTextColor(150, 150, 150);
+    doc.text('🌾 AgroGuard AI - Diagnose. Treat. Save the Harvest.', 20, y + 5);
+    doc.text('Made in India 🇮🇳 | v1.0', 20, y + 12);
+    doc.text('Disclaimer: Consult a local agronomist for critical cases.', 20, y + 19);
+    
+    // ===== SAVE =====
+    doc.save(`AgroGuard_${disease.replace(/\s+/g, '_')}.pdf`);
+    
+    if (typeof notify === 'function') {
+        notify('📄 PDF downloaded successfully!', 'success');
+    }
+}
+
+document.getElementById('waBtn').addEventListener('click', function() {
+  var r = window._result;
+  if (!r) { notify('Please scan a leaf first.', 'warning'); return; }
+  var disease = fmtDisease(r.disease_name);
+  var msg = '🌿 AgroGuard AI Report\nDisease: ' + disease + '\nConfidence: ' + Math.round((r.confidence||0)*100) + '%';
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+  if (typeof updateNavbar === 'function') {
+    updateNavbar();
+  }
+  updateHomeAuthState();
+});
+
+function updateHomeAuthState() { updateNavbar(); }
+window.addEventListener('beforeunload', function() { stopCamera(); });
 </script>
 
-<script src="js/gamification.js"></script>
 <script src="js/voice.js"></script>
 <script src="js/profile.js"></script>
-<script src="features.js"></script>
-
-<script>
-(function() {
-    window.switchTab = function(tab) {
-        console.log('Switching to tab:', tab);
-        var tabUpload = document.getElementById('tabUpload');
-        var tabCamera = document.getElementById('tabCamera');
-        var uploadInner = document.getElementById('uploadInner');
-        var cameraPanel = document.getElementById('cameraPanel');
-        if (tabUpload) tabUpload.classList.toggle('active', tab === 'upload');
-        if (tabCamera) tabCamera.classList.toggle('active', tab === 'camera');
-        if (uploadInner) uploadInner.style.display = tab === 'upload' ? '' : 'none';
-        if (cameraPanel) cameraPanel.style.display = tab === 'camera' ? '' : 'none';
-        if (tab === 'camera') {
-            setTimeout(function() {
-                var video = document.getElementById('cameraFeed');
-                if (video && navigator.mediaDevices) {
-                    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-                        .then(function(stream) {
-                            video.srcObject = stream;
-                            window._stream = stream;
-                            document.getElementById('captureBtn').disabled = false;
-                            notify('Camera ready!', 'success', 2000);
-                        })
-                        .catch(function(err) {
-                            console.error('Camera error:', err);
-                            notify('Camera not available. Use Upload Photo.', 'error');
-                            window.switchTab('upload');
-                        });
-                }
-            }, 100);
-        } else {
-            if (window._stream) {
-                window._stream.getTracks().forEach(function(t) { t.stop(); });
-                window._stream = null;
-            }
-            var video = document.getElementById('cameraFeed');
-            if (video) video.srcObject = null;
-        }
-    };
-})();
-</script>
 </body>
 </html>

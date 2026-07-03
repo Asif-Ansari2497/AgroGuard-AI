@@ -1,6 +1,5 @@
 /**
- * AgroGuard AI — Dashboard
- * COMPLETE FIXED VERSION - Weekly Chart Working
+ * AgroGuard AI — Dashboard (CLEAN VERSION)
  */
 
 let doughnutChart = null;
@@ -11,7 +10,8 @@ let barFullChart = null;
 document.addEventListener('DOMContentLoaded', () => {
   const token = localStorage.getItem('access_token');
   if (!token) {
-    window.location.href = '/';
+    // window.location.href = '/';
+    console.log('No token found - staying on page');
     return;
   }
 
@@ -57,15 +57,12 @@ async function loadStats() {
     renderDoughnut('diseaseChart', distribution);
     renderDoughnut('diseaseChartFull', distribution);
 
-    // Handle weekly activity data
     let weekly = stats.weekly_activity || {};
-    
-    // Convert date keys to day names if needed
     const convertedWeekly = {
       'Monday': 0, 'Tuesday': 0, 'Wednesday': 0, 'Thursday': 0,
       'Friday': 0, 'Saturday': 0, 'Sunday': 0
     };
-    
+
     for (let [key, value] of Object.entries(weekly)) {
       if (key.includes('-')) {
         const date = new Date(key);
@@ -75,8 +72,7 @@ async function loadStats() {
         convertedWeekly[key] = value;
       }
     }
-    
-    // If still empty, use sample data
+
     let hasData = Object.values(convertedWeekly).some(v => v > 0);
     if (!hasData) {
       console.log('No weekly data, using sample data');
@@ -95,7 +91,6 @@ async function loadStats() {
 
   } catch (err) {
     console.error('Stats error:', err);
-    // Fallback sample data
     const fallbackWeekly = {
       'Monday': 4, 'Tuesday': 3, 'Wednesday': 5,
       'Thursday': 2, 'Friday': 6, 'Saturday': 3, 'Sunday': 1
@@ -165,21 +160,18 @@ function renderBar(canvasId, weekly) {
     console.warn(`Canvas ${canvasId} not found`);
     return;
   }
-  
-  // Ensure canvas has proper size
+
   canvas.style.width = '100%';
   canvas.style.height = '300px';
   canvas.width = canvas.parentElement?.clientWidth || 600;
   canvas.height = 300;
-  
+
   const ctx = canvas.getContext('2d');
 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const shortDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-  // Get values for each day
   let values = days.map(day => weekly[day] || 0);
-  
+
   console.log(`Rendering bar chart for ${canvasId}:`, values);
 
   if (canvasId === 'weeklyChart' && barChart) barChart.destroy();
@@ -282,8 +274,6 @@ async function loadHistory() {
       const btn = document.createElement('button');
       btn.className = 'btn btn-sm btn-outline';
       btn.innerHTML = '<i class="fa fa-eye"></i> View';
-      btn.style.padding = '4px 12px';
-      btn.style.fontSize = '0.75rem';
       btn.onclick = () => showScanDetails(scan);
       const cell = row.insertCell(4);
       cell.appendChild(btn);
@@ -291,7 +281,7 @@ async function loadHistory() {
   } catch (err) {
     console.error('History error:', err);
     const tbody = document.getElementById('historyBody');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding:2rem;">Error loading history: ' + err.message + '</td></tr>';
+    if (tbody) tbody.innerHTML = '<table><td colspan="5" class="text-center" style="padding:2rem;">Error loading history: ' + err.message + '</td></tr>';
   }
 }
 
@@ -329,41 +319,59 @@ function initSidebarNavigation() {
     'progress': 'sec-progress'
   };
 
-  function switchSection(sectionId) {
+  function switchSection(sectionId, activeLink) {
+    // Hide all sections
     document.querySelectorAll('.dashboard-section').forEach(section => {
       section.classList.remove('active');
     });
+    // Show selected section
     const activeSection = document.getElementById(sectionId);
     if (activeSection) activeSection.classList.add('active');
 
+    // Update sidebar active state - remove active from all, add to clicked
     document.querySelectorAll('.sidebar-link').forEach(link => {
       link.classList.remove('active');
-      if (link.getAttribute('data-section') === sectionId.replace('sec-', '')) {
-        link.classList.add('active');
-      }
     });
+    if (activeLink) activeLink.classList.add('active');
   }
 
+  // Attach click handlers to all sidebar links
   document.querySelectorAll('.sidebar-link').forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
       const section = link.getAttribute('data-section');
       if (section && sections[section]) {
-        switchSection(sections[section]);
+        switchSection(sections[section], link);
       }
     });
   });
 
   console.log('✅ Sidebar navigation initialized');
 }
+function switchSection(sectionId) {
+  document.querySelectorAll('.dashboard-section').forEach(section => {
+    section.classList.remove('active');
+  });
+  const activeSection = document.getElementById(sectionId);
+  if (activeSection) activeSection.classList.add('active');
+}
 
-// ==================== DEVELOPMENT PROGRESS TRACKER ====================
+document.querySelectorAll('.sidebar-link').forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    const section = link.getAttribute('data-section');
+    if (section && sections[section]) {
+      switchSection(sections[section]);
+    }
+  });
+});
+
+console.log('✅ Sidebar navigation initialized');
+
+
 function loadProgressTracker() {
   const container = document.getElementById('progressStages');
-  if (!container) {
-    console.warn('Progress tracker container not found');
-    return;
-  }
+  if (!container) return;
 
   const stages = [
     { name: '🌿 AI Disease Detection', completed: true, desc: 'CNN model with 94% accuracy' },
@@ -418,3 +426,5 @@ function loadProgressTracker() {
   container.innerHTML = html;
   console.log('✅ Progress tracker loaded');
 }
+
+console.log("✅ Dashboard.js loaded successfully");

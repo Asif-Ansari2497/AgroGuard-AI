@@ -378,4 +378,177 @@ window.updateResultTranslation = updateResultTranslation;
     if (resultSection && resultSection.style.display === 'block' && window.lastResult) {
         updateResultTranslation(window.lastResult);
     }
+    console.log('✅ App initialized');
 })();
+
+// ==================== LEAF IMAGE VALIDATION (Frontend) ====================
+function validateLeafImage(file) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = function () {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const imageData = ctx.getImageData(0, 0, img.width, img.height);
+            const data = imageData.data;
+
+            let greenPixels = 0;
+            let totalPixels = data.length / 4;
+
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                if (g > r && g > b && g > 60) {
+                    greenPixels++;
+                }
+            }
+
+            const greenRatio = greenPixels / totalPixels;
+            console.log('🌿 Frontend green ratio:', greenRatio);
+            resolve(greenRatio > 0.03);
+        };
+        img.src = URL.createObjectURL(file);
+    });
+}
+
+// ==================== EMERGENCY LOOP FIX ====================
+if (window._APP_INITIALIZED) {
+    console.log('⚠️ App already initialized, skipping...');
+} else {
+    window._APP_INITIALIZED = true;
+    console.log('✅ App initializing first time');
+}
+// ============================================
+// 📄 PDF GENERATOR - COMPLETE CLEAN VERSION
+// ============================================
+
+function cleanPDFText(text) {
+    if (!text) return '';
+    if (typeof text !== 'string') return text;
+
+    const replacements = {
+        'Q=0?': 'DISEASE:',
+        'Q=Y': 'Caused by:',
+        '&p': 'Risk Level:',
+        'Q=U': 'FAVORABLE CONDITIONS:',
+        'Q=P=Q': 'LONG-TERM PREVENTION:',
+        'Q<B?': 'AgroGuard AI',
+        'Q=ÜE': 'Description',
+        'Q=ÜS': 'Treatment',
+        'Q=B?': 'Immediate Actions',
+        'Q>Y': 'Caused by',
+        '©YQ<B?': 'AgroGuard AI'
+    };
+
+    let cleaned = text;
+    Object.keys(replacements).forEach(key => {
+        cleaned = cleaned.replace(new RegExp(key, 'g'), replacements[key]);
+    });
+    cleaned = cleaned.replace(/[^\w\s.,!?():;\-]/g, ' ').replace(/\s+/g, ' ').trim();
+    return cleaned;
+}
+
+function generateCleanPDF(result) {
+    const disease = cleanPDFText(result.disease) || 'Unknown Disease';
+    const severity = cleanPDFText(result.severity) || 'Unknown';
+    const confidence = result.confidence ? (result.confidence * 100).toFixed(1) + '%' : 'N/A';
+    const description = cleanPDFText(result.description) || 'No description available.';
+    const treatment = cleanPDFText(result.treatment) || 'No treatment available.';
+    const prevention = cleanPDFText(result.prevention) || 'No prevention available.';
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    let y = 20;
+
+    // Date
+    doc.setFontSize(11);
+    doc.setTextColor(100, 100, 100);
+    doc.text(new Date().toLocaleDateString('en-IN'), 170, y);
+    y += 10;
+
+    // Title
+    doc.setFontSize(28);
+    doc.setTextColor(0, 0, 0);
+    doc.text(disease, 20, y);
+    y += 12;
+
+    // Severity
+    const colors = { 'low': [0, 128, 0], 'medium': [255, 165, 0], 'high': [255, 0, 0], 'critical': [200, 0, 0] };
+    const color = colors[severity.toLowerCase()] || [0, 0, 0];
+    doc.setFontSize(14);
+    doc.setTextColor(color[0], color[1], color[2]);
+    doc.text(severity.toUpperCase(), 20, y);
+    y += 8;
+
+    // Confidence
+    doc.setFontSize(12);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Confidence: ${confidence}`, 20, y);
+    y += 12;
+
+    // Farmer
+    const farmerName = localStorage.getItem('userName') || 'Farmer';
+    doc.setFontSize(11);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`Farmer: ${farmerName}`, 20, y);
+    y += 12;
+
+    // Divider
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, y, 190, y);
+    y += 10;
+
+    // Description
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text('DESCRIPTION', 20, y);
+    y += 8;
+    doc.setFontSize(11);
+    doc.setTextColor(50, 50, 50);
+    const descLines = doc.splitTextToSize(description, 170);
+    doc.text(descLines, 20, y);
+    y += (descLines.length * 5.5) + 10;
+
+    // Treatment
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text('TREATMENT PLAN', 20, y);
+    y += 8;
+    doc.setFontSize(11);
+    doc.setTextColor(50, 50, 50);
+    const treatLines = doc.splitTextToSize(treatment, 170);
+    doc.text(treatLines, 20, y);
+    y += (treatLines.length * 5.5) + 10;
+
+    // Prevention (new page if needed)
+    if (y > 230) { doc.addPage(); y = 20; }
+
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text('PREVENTION', 20, y);
+    y += 8;
+    doc.setFontSize(11);
+    doc.setTextColor(50, 50, 50);
+    const prevLines = doc.splitTextToSize(prevention, 170);
+    doc.text(prevLines, 20, y);
+    y += (prevLines.length * 5.5) + 10;
+
+    // Footer
+    y = 275;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, y, 190, y);
+    y += 5;
+    doc.setFontSize(9);
+    doc.setTextColor(150, 150, 150);
+    doc.text('🌾 AgroGuard AI - Diagnose. Treat. Save the Harvest.', 20, y + 5);
+    doc.text('Made in India 🇮🇳 | v1.0', 20, y + 12);
+    doc.text('Disclaimer: Consult a local agronomist for critical cases.', 20, y + 19);
+
+    doc.save(`AgroGuard_${disease.replace(/\s+/g, '_')}.pdf`);
+    if (typeof notify === 'function') notify('📄 PDF downloaded!', 'success');
+}
+
+console.log('✅ Clean PDF Generator Ready!');
