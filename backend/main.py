@@ -48,13 +48,8 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 # ─── Frontend folder paths ────────────────────────────────────────────────────
 import os
 
-print("Current Working Directory:", os.getcwd())
-print("main.py location:", Path(__file__).resolve())
-
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 
-print("Frontend directory:", FRONTEND_DIR)
-print("Frontend exists:", FRONTEND_DIR.exists())
 
 # ─── Page routes ──────────────────────────────────────────────────────────────
 @app.get("/", include_in_schema=False)
