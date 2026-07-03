@@ -1,8 +1,11 @@
 /**
- * AgroGuard AI — Auth UI (FULLY WORKING - NO LOOP)
+ * AgroGuard AI — Auth UI (FIXED PRODUCTION VERSION)
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+
+    const BASE_URL = "https://agroguard-ai-6xil.onrender.com";
+
     const overlay = document.getElementById('authModal');
     const loginForm = document.getElementById('loginForm');
     const regForm = document.getElementById('registerForm');
@@ -33,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function storeAuth(token, user) {
         localStorage.setItem('access_token', token);
         if (user) localStorage.setItem('user', JSON.stringify(user));
+
         if (typeof window.setAuth === 'function') {
             window.setAuth(token, user);
         }
@@ -41,12 +45,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function clearAuth() {
         localStorage.removeItem('access_token');
         localStorage.removeItem('user');
+
         if (typeof window.clearAuth === 'function') {
             window.clearAuth();
         }
     }
 
-    // ── UI Event Listeners ──────────────────────────────────────────────────────
+    // ── UI Events ────────────────────────────────────────────────────────────────
     document.querySelectorAll('[data-open-auth]').forEach(btn => {
         btn.addEventListener('click', e => {
             e.preventDefault();
@@ -78,6 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (loginForm) {
         loginForm.addEventListener('submit', async e => {
             e.preventDefault();
+
             const email = document.getElementById('loginEmail').value.trim();
             const password = document.getElementById('loginPassword').value;
             const btn = loginForm.querySelector('[type="submit"]');
@@ -90,20 +96,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 form.append('username', email);
                 form.append('password', password);
 
-                const res = await fetch('/auth/token', {
+                const res = await fetch(`${BASE_URL}/auth/token`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
                     body: form
                 });
 
                 const data = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(data.detail || 'Login failed');
+
+                if (!res.ok) {
+                    throw new Error(data.detail || 'Login failed');
+                }
 
                 storeAuth(data.access_token, data.user);
                 updateNavbar();
                 closeModal();
                 notify('Welcome back! 🌿', 'success');
-                if (typeof updateHomeAuthState === 'function') updateHomeAuthState();
+
+                if (typeof updateHomeAuthState === 'function') {
+                    updateHomeAuthState();
+                }
 
             } catch (err) {
                 notify(err.message || 'Login failed.', 'error');
@@ -118,6 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (regForm) {
         regForm.addEventListener('submit', async e => {
             e.preventDefault();
+
             const name = document.getElementById('regName').value.trim();
             const email = document.getElementById('regEmail').value.trim();
             const password = document.getElementById('regPassword').value;
@@ -128,23 +143,34 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.textContent = 'Creating account...';
 
             try {
-                let data;
-                if (typeof window.api === 'function') {
-                    data = await window.api('POST', '/auth/register', { name, email, password, location });
-                } else {
-                    const res = await fetch('/auth/register', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name, email, password, location })
-                    });
-                    data = await res.json();
-                    if (!res.ok) throw new Error(data.detail || 'Registration failed');
+                const res = await fetch(`${BASE_URL}/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name,
+                        email,
+                        password,
+                        location
+                    })
+                });
+
+                const data = await res.json().catch(() => ({}));
+
+                if (!res.ok) {
+                    throw new Error(data.detail || 'Registration failed');
                 }
+
                 storeAuth(data.access_token, data.user);
                 updateNavbar();
                 closeModal();
                 notify(`Welcome, ${name}! 🌱`, 'success');
-                if (typeof updateHomeAuthState === 'function') updateHomeAuthState();
+
+                if (typeof updateHomeAuthState === 'function') {
+                    updateHomeAuthState();
+                }
+
             } catch (err) {
                 notify(err.message || 'Registration failed.', 'error');
             } finally {
@@ -156,13 +182,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── LOGOUT ─────────────────────────────────────────────────────────────────
     const logoutBtn = document.getElementById('navLogoutBtn');
+
     if (logoutBtn) {
         logoutBtn.addEventListener('click', () => {
             clearAuth();
             updateNavbar();
             notify('Logged out.', 'info');
-            // NO REDIRECT - Stay on page
-            if (typeof updateHomeAuthState === 'function') updateHomeAuthState();
+
+            if (typeof updateHomeAuthState === 'function') {
+                updateHomeAuthState();
+            }
         });
     }
 
