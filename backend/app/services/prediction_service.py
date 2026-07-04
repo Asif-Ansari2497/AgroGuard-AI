@@ -20,8 +20,7 @@ def get_model_and_classes():
     if _model is None:
         possible_paths = [
             os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models", "tomato_mobilenetv2.h5"),
-            "tomato_mobilenetv2.h5",
-            "../models/tomato_mobilenetv2.h5",
+
             "models/tomato_mobilenetv2.h5"
         ]
         for path in possible_paths:
