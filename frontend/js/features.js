@@ -232,6 +232,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const user = typeof getUser !== 'undefined' ? getUser() : null;
         if (user && user.location) fd.append('location_name', user.location);
 
+        console.log("API_BASE =", API_BASE);
+        console.log("Calling:", `${API_BASE}/predict/`);
         const result = await api('POST', '/predict/', fd, true);
 
         // ============ CRITICAL FIX ============

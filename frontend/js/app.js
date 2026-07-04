@@ -86,7 +86,7 @@ function translateResult(diseaseName, lang) {
     return trans[diseaseName] || trans['Tomato_healthy'];
 }
 
-const API_BASE = '';
+const API_BASE = 'https://agroguard-ai-6xil.onrender.com';
 const SUPPORTED_LANGS = { en: 'English', hi: 'हिन्दी', pa: 'ਪੰਜਾਬੀ' };
 
 // ─── i18n ─────────────────────────────────────────────────────────────────────
