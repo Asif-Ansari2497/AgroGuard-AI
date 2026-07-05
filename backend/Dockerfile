@@ -16,6 +16,7 @@
     # Copy application code
     COPY backend/ .
     COPY frontend ./frontend
+    COPY models ./models
 
     # Create uploads directory
     RUN mkdir -p uploads
