@@ -185,7 +185,7 @@ async def get_outbreak_data(days: int = 30) -> List[Dict[str, Any]]:
     """
     Get outbreak data for heatmap.
     Used by GET /scans/outbreak
-    Returns list of points with lat, lng, disease, confidence, intensity
+    Returns list of points with latitude, longitude, disease, confidence, intensity
     """
     db = get_database()
     cutoff = datetime.utcnow() - timedelta(days=days)
@@ -195,16 +195,17 @@ async def get_outbreak_data(days: int = 30) -> List[Dict[str, Any]]:
     points = []
     async for doc in cursor:
         points.append({
-            "lat": doc["latitude"],
-            "lng": doc["longitude"],
-            "disease": doc["disease_name"],
+            "latitude": doc["latitude"],
+            "longitude": doc["longitude"],
+            "disease_name": doc["disease_name"],
             "confidence": doc["confidence"],
             "intensity": doc["confidence"],
             "location_name": doc.get("location_name", "Unknown"),
-            "timestamp": doc["created_at"].isoformat()
+            "created_at": doc["created_at"].isoformat() if isinstance(doc["created_at"], datetime) else doc["created_at"]
         })
+    
+    print(f"🗺️ get_outbreak_data: found {len(points)} points in last {days} days")
     return points
-
 # ==================== ALIASES FOR SCANS.PY COMPATIBILITY ====================
 
 async def get_all_outbreak_points(days: int = 30) -> List[Dict[str, Any]]:
