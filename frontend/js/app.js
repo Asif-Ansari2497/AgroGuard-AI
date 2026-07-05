@@ -87,6 +87,7 @@ function translateResult(diseaseName, lang) {
 }
 
 const API_BASE = 'https://agroguard-ai-6xil.onrender.com';
+window.API_BASE = API_BASE;
 const SUPPORTED_LANGS = { en: 'English', hi: 'हिन्दी', pa: 'ਪੰਜਾਬੀ' };
 
 // ─── i18n ─────────────────────────────────────────────────────────────────────

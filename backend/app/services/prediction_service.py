@@ -16,11 +16,6 @@ _class_names = None
 # ==================== MODEL LOADING ====================
 
 def get_model_and_classes():
-    global _model, _class_names
-    print("Current working directory:", os.getcwd())
-    print("Current file:", __file__)
-    print("Files here:", os.listdir("."))
-    print("Models exists:", os.path.exists("models"))
     if _model is None:
         
         possible_paths = [

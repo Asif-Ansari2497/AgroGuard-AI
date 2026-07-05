@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadUser() {
   try {
-    const res = await fetch('/auth/me', {
+    const res = await fetch('${API_BASE}/auth/me', {
       headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
     });
     if (res.ok) {
@@ -73,7 +73,7 @@ function setDefaultAvatar() {
 
 async function loadStats() {
   try {
-    const res = await fetch('/scans/stats', {
+    const res = await fetch('${API_BASE}/scans/stats', {
       headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
     });
     if (res.ok) {
@@ -166,7 +166,7 @@ function setupEvents() {
   document.getElementById('saveProfileBtn')?.addEventListener('click', async () => {
     const newName = document.getElementById('editNameInput').value.trim();
     if (newName) {
-      await fetch('/auth/profile', {
+      await fetch('${API_BASE}/auth/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('access_token') },
         body: JSON.stringify({ name: newName })
