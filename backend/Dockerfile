@@ -3,6 +3,7 @@
 
     # Set working directory
     WORKDIR /app
+    RUN echo "🔥 NEW DOCKERFILE IS BEING USED 🔥"
 
     # Install system dependencies (for Pillow, bcrypt)
     RUN apt-get update && apt-get install -y --no-install-recommends \
