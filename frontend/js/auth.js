@@ -1,6 +1,9 @@
 /**
  * AgroGuard AI — Auth UI (FIXED PRODUCTION VERSION)
+ * 🔥 Updated: Exact Village Location with Geocode.maps.co
  */
+
+const GEOCODE_API_KEY = "6a4abe8087914150601367xmgecccec";
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -128,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ── REGISTER ───────────────────────────────────────────────────────────────
+    // ── REGISTER WITH EXACT VILLAGE LOCATION ──────────────────────────────────
     if (regForm) {
         regForm.addEventListener('submit', async e => {
             e.preventDefault();
@@ -136,13 +139,67 @@ document.addEventListener('DOMContentLoaded', () => {
             const name = document.getElementById('regName').value.trim();
             const email = document.getElementById('regEmail').value.trim();
             const password = document.getElementById('regPassword').value;
-            const location = document.getElementById('regLocation')?.value.trim();
             const btn = regForm.querySelector('[type="submit"]');
 
             btn.disabled = true;
             btn.textContent = 'Creating account...';
 
+            let location = "";
+
             try {
+                // 🔥 Step 1: Get GPS coordinates
+                const position = await new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject);
+                });
+
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+
+                console.log("📍 Latitude:", lat);
+                console.log("📍 Longitude:", lon);
+
+                // 🔥 Step 2: Get EXACT VILLAGE using Geocode.maps.co
+                const geoRes = await fetch(
+                    `https://geocode.maps.co/reverse?lat=${lat}&lon=${lon}&api_key=${GEOCODE_API_KEY}`
+                );
+
+                const geoData = await geoRes.json();
+                const address = geoData.address || {};
+
+                // 🔥 Step 3: Extract village/town (priority order)
+                const village =
+                    address.village ||
+                    address.town ||
+                    address.city ||
+                    address.municipality ||
+                    address.suburb ||
+                    address.neighbourhood ||
+                    address.hamlet ||
+                    address.locality ||
+                    "";
+
+                const district = address.county || address.state_district || "";
+                const state = address.state || "";
+                const postcode = address.postcode || "";
+                const country = address.country || "";
+
+                // 🔥 Step 4: Build full location string
+                const parts = [village, district, state, postcode, country].filter(Boolean);
+                location = parts.join(", ");
+
+                console.log("📍 Village:", village);
+                console.log("📍 District:", district);
+                console.log("📍 State:", state);
+                console.log("📍 Postcode:", postcode);
+                console.log("📍 Full Location:", location);
+
+            } catch (err) {
+                console.warn("⚠️ Location not available:", err);
+                location = "";
+            }
+
+            try {
+                // 🔥 Step 5: Send to backend
                 const res = await fetch(`https://agroguard-ai-6xil.onrender.com/auth/register`, {
                     method: 'POST',
                     headers: {
@@ -152,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         name: name,
                         email: email,
                         password: password,
-                        location: location || ""
+                        location: location
                     })
                 });
 
@@ -201,4 +258,5 @@ document.addEventListener('DOMContentLoaded', () => {
     window.switchAuthTab = switchTab;
 
     console.log('✅ Auth module initialized');
+    console.log('📍 Geocode API Key:', GEOCODE_API_KEY ? '✅ Set' : '❌ Not Set!');
 });
