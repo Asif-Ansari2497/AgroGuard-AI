@@ -16,6 +16,7 @@ _class_names = None
 # ==================== MODEL LOADING ====================
 
 def get_model_and_classes():
+    global _model, _class_names
     if _model is None:
         
         possible_paths = [
