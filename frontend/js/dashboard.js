@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadUserInfo() {
   try {
-    const res = await fetch(`${API_BASE}/auth/me`, {
+    const res = await fetch(`${window.API_BASE}/auth/me`, {
       headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
     });
     if (res.ok) {
@@ -40,7 +40,7 @@ async function loadUserInfo() {
 
 async function loadStats() {
   try {
-    const res = await fetch(`${API_BASE}/scans/stats`, {
+    const res = await fetch(`${window.API_BASE}/scans/stats`, {
       headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
     });
     if (!res.ok) throw new Error('Failed to fetch stats');
@@ -218,7 +218,7 @@ function renderBar(canvasId, weekly) {
 
 async function loadHistory() {
   try {
-    const res = await fetch('${API_BASE}/scans/history?limit=50', {
+    const res = await fetch('${window.API_BASE}/scans/history?limit=50', {
       headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
     });
     if (!res.ok) throw new Error('Failed to fetch history');
