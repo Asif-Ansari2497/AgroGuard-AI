@@ -17,7 +17,12 @@ _class_names = None
 
 def get_model_and_classes():
     global _model, _class_names
+    print("Current working directory:", os.getcwd())
+    print("Current file:", __file__)
+    print("Files here:", os.listdir("."))
+    print("Models exists:", os.path.exists("models"))
     if _model is None:
+        
         possible_paths = [
             os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models", "tomato_mobilenetv2.h5"),
 
