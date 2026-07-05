@@ -6,7 +6,6 @@ let doughnutChart = null;
 let barChart = null;
 let doughnutFullChart = null;
 let barFullChart = null;
-const API_BASE = "https://agroguard-ai-6xil.onrender.com";
 
 document.addEventListener('DOMContentLoaded', () => {
   const token = localStorage.getItem('access_token');
@@ -218,7 +217,7 @@ function renderBar(canvasId, weekly) {
 
 async function loadHistory() {
   try {
-    const res = await fetch('${window.API_BASE}/scans/history?limit=50', {
+    const res = await fetch(`${window.API_BASE}/scans/history?limit=50`, {
       headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
     });
     if (!res.ok) throw new Error('Failed to fetch history');
