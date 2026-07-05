@@ -1,8 +1,12 @@
-// Complete Profile Page with Image Upload
+// ============================================
+// COMPLETE PROFILE.JS - FIXED VERSION
+// ============================================
+
+const GEOCODE_API_KEY = "6a4abe8087914150601367xmgecccec";
+
 document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('access_token');
   if (!token) {
-    // window.location.href = '/';
     console.log('No token found - staying on page');
     return;
   }
@@ -23,22 +27,47 @@ async function loadUser() {
       const user = await res.json();
       document.getElementById('profileName').innerText = user.name || 'Farmer';
       document.getElementById('profileEmail').innerText = user.email;
-      document.getElementById('profileLocation').innerText = user.location || 'Not set';
       document.getElementById('profileMemberSince').innerText = user.created_at ? new Date(user.created_at).toLocaleDateString() : '—';
 
       document.getElementById('navUserName').innerText = user.name?.split(' ')[0] || 'User';
       document.getElementById('navAvatar').innerText = user.name?.charAt(0).toUpperCase() || 'U';
 
-      // ============ FIX: Update avatar with user's name ============
+      // Avatar
       const avatar = document.getElementById('profileAvatar');
-      if (avatar) {
-        if (user.name) {
-          avatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=4caf50&color=fff&size=128`;
-        } else {
-          avatar.src = 'https://ui-avatars.com/api/?name=User&background=4caf50&color=fff&size=128';
-        }
+      if (avatar && user.name) {
+        avatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=4caf50&color=fff&size=128`;
       }
-      // ===========================================================
+
+      // 🔥 EXACT LOCATION using GPS
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+
+          try {
+            const geoRes = await fetch(
+              `https://geocode.maps.co/reverse?lat=${lat}&lon=${lon}&api_key=${GEOCODE_API_KEY}`
+            );
+            const geoData = await geoRes.json();
+            const address = geoData.address || {};
+
+            const village = address.village || address.town || address.city || "";
+            const district = address.county || address.state_district || "";
+            const state = address.state || "";
+            const postcode = address.postcode || "";
+
+            const exactLocation = [village, district, state, postcode].filter(Boolean).join(", ");
+            document.getElementById('profileLocation').innerText = exactLocation || user.location || 'Not set';
+            console.log("📍 Exact Location:", exactLocation);
+          } catch (e) {
+            document.getElementById('profileLocation').innerText = user.location || 'Not set';
+          }
+        }, () => {
+          document.getElementById('profileLocation').innerText = user.location || 'Not set';
+        });
+      } else {
+        document.getElementById('profileLocation').innerText = user.location || 'Not set';
+      }
 
       if (user.location && user.location !== 'Not set') {
         document.getElementById('weatherLocation').innerHTML = `📍 ${user.location}`;
@@ -57,12 +86,10 @@ function loadSavedAvatar() {
   }
 }
 
-// ============ FIX: Set default avatar if no image ============
 function setDefaultAvatar() {
   const avatar = document.getElementById('profileAvatar');
   if (avatar) {
     const currentSrc = avatar.src || '';
-    // If no image or broken image, use UI Avatars
     if (!currentSrc || currentSrc.includes('null') || currentSrc.includes('undefined')) {
       const name = document.getElementById('profileName')?.innerText || 'User';
       avatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4caf50&color=fff&size=128`;
@@ -103,55 +130,68 @@ async function loadStats() {
 }
 
 async function loadWeather() {
-  const location = document.getElementById('profileLocation')?.innerText;
-  if (!location || location === 'Not set') {
-    document.getElementById('weatherLocation').innerHTML = '📍 Location not set';
-    return;
+  // 🔥 Use GPS coordinates directly
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      const lat = position.coords.latitude;
+      const lon = position.coords.longitude;
+
+      try {
+        // Get exact location name
+        const geoRes = await fetch(
+          `https://geocode.maps.co/reverse?lat=${lat}&lon=${lon}&api_key=${GEOCODE_API_KEY}`
+        );
+        const geoData = await geoRes.json();
+        const address = geoData.address || {};
+
+        const village = address.village || address.town || address.city || "";
+        const district = address.county || address.state_district || "";
+        const state = address.state || "";
+        const postcode = address.postcode || "";
+
+        const exactLocation = [village, district, state, postcode].filter(Boolean).join(", ");
+        document.getElementById('weatherLocation').innerHTML = `📍 ${exactLocation}`;
+
+        // Get weather
+        const weather = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+        const data = await weather.json();
+
+        const temp = Math.round(data.current_weather.temperature);
+        const wind = data.current_weather.windspeed;
+        const code = data.current_weather.weathercode;
+
+        document.getElementById('weatherTemp').innerHTML = `${temp}°C`;
+        document.getElementById('weatherWind').innerHTML = `${wind} km/h`;
+        document.getElementById('weatherFeels').innerHTML = `${temp + 2}°C`;
+        document.getElementById('weatherHumidity').innerHTML = '--%';
+
+        const icons = { 0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️', 45: '🌫️', 51: '🌦️', 61: '🌧️', 95: '⛈️' };
+        document.getElementById('weatherIcon').innerHTML = icons[code] || '🌍';
+
+        let risk = 'Medium', riskClass = 'risk-medium', riskText = 'Moderate conditions. Monitor crops.';
+        if (code >= 61 || temp > 32) {
+          risk = 'High'; riskClass = 'risk-high'; riskText = 'High disease risk! Take preventive measures.';
+        } else if (code <= 2 && temp < 25) {
+          risk = 'Low'; riskClass = 'risk-low'; riskText = 'Weather conditions are safe for crops.';
+        }
+
+        const riskEl = document.getElementById('diseaseRisk');
+        riskEl.className = `risk-badge ${riskClass}`;
+        riskEl.innerHTML = `⚠️ Disease Risk: ${risk}<br><span style="font-size: 0.65rem;">${riskText}</span>`;
+
+      } catch (e) {
+        console.error('Weather fetch error:', e);
+        document.getElementById('weatherLocation').innerHTML = '📍 Weather unavailable';
+      }
+    }, () => {
+      document.getElementById('weatherLocation').innerHTML = '📍 Location not available';
+    });
+  } else {
+    document.getElementById('weatherLocation').innerHTML = '📍 Geolocation not supported';
   }
-
-  try {
-    const city = location.split(',')[0].trim();
-    const geo = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&format=json`);
-    const geoData = await geo.json();
-
-    if (geoData.results && geoData.results[0]) {
-      const { latitude, longitude } = geoData.results[0];
-      const weather = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
-      const data = await weather.json();
-
-      const temp = Math.round(data.current_weather.temperature);
-      const wind = data.current_weather.windspeed;
-      const code = data.current_weather.weathercode;
-
-      document.getElementById('weatherTemp').innerHTML = `${temp}°C`;
-      document.getElementById('weatherWind').innerHTML = `${wind} km/h`;
-      document.getElementById('weatherFeels').innerHTML = `${temp + 2}°C`;
-      document.getElementById('weatherHumidity').innerHTML = '--%';
-
-      const icons = { 0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️', 45: '🌫️', 51: '🌦️', 61: '🌧️', 95: '⛈️' };
-      document.getElementById('weatherIcon').innerHTML = icons[code] || '🌍';
-
-      let risk = 'Medium', riskClass = 'risk-medium', riskText = 'Moderate conditions. Monitor crops.';
-      if (code >= 61 || temp > 32) {
-        risk = 'High';
-        riskClass = 'risk-high';
-        riskText = 'High disease risk! Take preventive measures.';
-      }
-      else if (code <= 2 && temp < 25) {
-        risk = 'Low';
-        riskClass = 'risk-low';
-        riskText = 'Weather conditions are safe for crops.';
-      }
-
-      const riskEl = document.getElementById('diseaseRisk');
-      riskEl.className = `risk-badge ${riskClass}`;
-      riskEl.innerHTML = `⚠️ Disease Risk: ${risk}<br><span style="font-size: 0.65rem;">${riskText}</span>`;
-    }
-  } catch (e) { console.error('Weather fetch error:', e); }
 }
 
 function setupEvents() {
-  // Edit Profile
   document.getElementById('editProfileBtn')?.addEventListener('click', () => {
     const form = document.getElementById('editForm');
     form.style.display = form.style.display === 'none' ? 'block' : 'none';
@@ -174,18 +214,14 @@ function setupEvents() {
       document.getElementById('navUserName').innerText = newName.split(' ')[0];
       document.getElementById('navAvatar').innerText = newName.charAt(0).toUpperCase();
 
-      // ============ FIX: Update avatar after name change ============
       const avatar = document.getElementById('profileAvatar');
       if (avatar) {
         avatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(newName)}&background=4caf50&color=fff&size=128`;
       }
-      // ===========================================================
-
       document.getElementById('editForm').style.display = 'none';
     }
   });
 
-  // Avatar Upload
   document.getElementById('uploadAvatarBtn')?.addEventListener('click', () => {
     document.getElementById('avatarInput').click();
   });
@@ -207,15 +243,14 @@ function setupEvents() {
     }
   });
 
-  // Logout
   document.getElementById('profileLogoutBtn')?.addEventListener('click', () => {
     localStorage.clear();
     window.location.href = '/';
   });
 }
 
-// ============ Call setDefaultAvatar on load ============
-// This ensures avatar shows even if something fails
 setTimeout(() => {
   setDefaultAvatar();
 }, 500);
+
+console.log('✅ Profile.js loaded with exact location!');
