@@ -348,14 +348,21 @@
 <script src="js/voice.js"></script>
 
 <script>
+  
 // ========================================
-// FINAL WEATHER FIX - EXACT GPS LOCATION
+// WEATHER + EXACT VILLAGE LOCATION
 // ========================================
 
 const WEATHER_API_KEY = "1dbbea00af379d51aa7c81406fc3ce96";
+const GEOCODE_API_KEY = "6a4abe8087914150601367xmgecccec";
+
+let currentLat = null;
+let currentLon = null;
 
 async function fetchWeather(lat, lon) {
-    // ✅ Using EXACT GPS coordinates for your current location
+    currentLat = lat;
+    currentLon = lon;
+    
     const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${WEATHER_API_KEY}&units=metric`;
     
     console.log("📍 Fetching weather for coordinates:", lat, lon);
@@ -365,7 +372,7 @@ async function fetchWeather(lat, lon) {
         const data = await response.json();
         
         if (data.cod === 200) {
-            updateWeatherUI(data);
+            await updateWeatherUI(data, lat, lon);
             console.log("✅ Weather loaded for:", data.name, data.main.temp + "°C");
         } else {
             console.error("❌ Weather API error:", data.message);
@@ -377,7 +384,7 @@ async function fetchWeather(lat, lon) {
     }
 }
 
-function updateWeatherUI(data) {
+async function updateWeatherUI(data, lat, lon) {
     const tempEl = document.getElementById('weatherTemp');
     const humidityEl = document.getElementById('weatherHumidity');
     const windEl = document.getElementById('weatherWind');
@@ -387,31 +394,45 @@ function updateWeatherUI(data) {
     const iconEl = document.getElementById('weatherIcon');
     const profileLocationEl = document.getElementById('profileLocation');
     
-    // ✅ FIX: Apply temperature correction for Bathinda
-    // OpenWeatherMap shows 34°C but actual is 30°C
+    // Temperature
     let temp = data.main.temp;
     let feelsLike = data.main.feels_like;
     
-    // If location is in India, apply -4°C correction
     if (data.sys.country === "IN") {
         temp = temp - 4;
         feelsLike = feelsLike - 4;
     }
     
-    // Update weather card with CORRECTED temperature
     if (tempEl) tempEl.textContent = Math.round(temp) + '°C';
     if (humidityEl) humidityEl.textContent = data.main.humidity + '%';
     if (windEl) windEl.textContent = Math.round(data.wind.speed * 3.6) + ' km/h';
     if (feelsEl) feelsEl.textContent = Math.round(feelsLike) + '°C';
     if (locationEl) locationEl.textContent = '📍 ' + data.name + ', ' + data.sys.country;
     
-    // ✅ FIX: Update the LOCATION row in profile info
-    if (profileLocationEl) {
-        profileLocationEl.textContent = data.name + ', ' + data.sys.country;
-        console.log("✅ Profile location updated to:", data.name + ', ' + data.sys.country);
+    // 🔥 EXACT VILLAGE LOCATION using Geocode API
+    if (profileLocationEl && lat && lon) {
+        try {
+            const geoRes = await fetch(
+                `https://geocode.maps.co/reverse?lat=${lat}&lon=${lon}&api_key=${GEOCODE_API_KEY}`
+            );
+            const geoData = await geoRes.json();
+            const address = geoData.address || {};
+            
+            const village = address.village || address.town || address.city || "";
+            const district = address.county || address.state_district || "";
+            const state = address.state || "";
+            const postcode = address.postcode || "";
+            
+            const exactLocation = [village, district, state, postcode].filter(Boolean).join(", ");
+            profileLocationEl.textContent = exactLocation || data.name + ', ' + data.sys.country;
+            console.log("📍 Exact Location:", exactLocation);
+        } catch (e) {
+            console.warn("⚠️ Geocode API error, using weather location:", e);
+            profileLocationEl.textContent = data.name + ', ' + data.sys.country;
+        }
     }
     
-    // Update weather icon
+    // Weather Icon
     if (iconEl) {
         const condition = data.weather[0].main.toLowerCase();
         if (condition.includes('clear') || condition.includes('sun')) iconEl.textContent = '☀️';
@@ -423,9 +444,8 @@ function updateWeatherUI(data) {
         else iconEl.textContent = '☁️';
     }
     
-    // Calculate disease risk using CORRECTED temperature
+    // Disease Risk
     if (diseaseRiskEl) {
-        // Using corrected temp for risk calculation
         const riskTemp = temp;
         const humidity = data.main.humidity;
         let risk = 'Low';
@@ -447,25 +467,10 @@ function updateWeatherUI(data) {
     }
 }
 
-async function fetchWeatherByIP() {
-    try {
-        const ipRes = await fetch('https://ipapi.co/json/');
-        const ipData = await ipRes.json();
-        if (ipData.latitude && ipData.longitude) {
-            fetchWeather(ipData.latitude, ipData.longitude);
-            console.log("📍 Location found via IP:", ipData.city, ipData.country_name);
-        }
-    } catch (error) {
-        console.error("❌ IP location failed:", error);
-        document.getElementById('weatherLocation').textContent = '📍 Could not detect location';
-    }
-}
-
 function getUserLocation() {
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             (position) => {
-                // ✅ Using EXACT GPS coordinates from your device
                 fetchWeather(position.coords.latitude, position.coords.longitude);
                 console.log("📍 Location found via GPS:", position.coords.latitude, position.coords.longitude);
             },
@@ -477,6 +482,20 @@ function getUserLocation() {
     } else {
         console.log("⚠️ Geolocation not supported, using IP");
         fetchWeatherByIP();
+    }
+}
+
+async function fetchWeatherByIP() {
+    try {
+        const ipRes = await fetch('https://ipapi.co/json/');
+        const ipData = await ipRes.json();
+        if (ipData.latitude && ipData.longitude) {
+            fetchWeather(ipData.latitude, ipData.longitude);
+            console.log("📍 Location found via IP:", ipData.city, ipData.country_name);
+        }
+    } catch (error) {
+        console.error("❌ IP location failed:", error);
+        document.getElementById('weatherLocation').textContent = '📍 Could not detect location';
     }
 }
 
