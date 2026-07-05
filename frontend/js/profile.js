@@ -1,8 +1,12 @@
 // ============================================
-// COMPLETE PROFILE.JS - FIXED VERSION
+// PROFILE.JS - FIXED VERSION (No duplicate declaration)
 // ============================================
 
-const GEOCODE_API_KEY = "6a4abe8087914150601367xmgecccec";
+// 🔥 SET API BASE URL
+window.API_BASE = "https://agroguard-ai-6xil.onrender.com";
+
+// ✅ GEOCODE_API_KEY already declared in auth.js
+// Using it directly here
 
 document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('access_token');
@@ -32,13 +36,12 @@ async function loadUser() {
       document.getElementById('navUserName').innerText = user.name?.split(' ')[0] || 'User';
       document.getElementById('navAvatar').innerText = user.name?.charAt(0).toUpperCase() || 'U';
 
-      // Avatar
       const avatar = document.getElementById('profileAvatar');
       if (avatar && user.name) {
         avatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=4caf50&color=fff&size=128`;
       }
 
-      // 🔥 EXACT LOCATION using GPS
+      // 🔥 EXACT LOCATION using GPS (GEOCODE_API_KEY from auth.js)
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(async (position) => {
           const lat = position.coords.latitude;
@@ -130,7 +133,7 @@ async function loadStats() {
 }
 
 async function loadWeather() {
-  // 🔥 Use GPS coordinates directly
+  // 🔥 Use GPS coordinates directly (GEOCODE_API_KEY from auth.js)
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(async (position) => {
       const lat = position.coords.latitude;
