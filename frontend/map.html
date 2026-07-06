@@ -409,23 +409,42 @@
 <!-- ══ Scripts ═══════════════════════════════════════════════════════════════ -->
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<!-- Leaflet Heat plugin -->
-<script src="https://rawcdn.githack.com/Leaflet/Leaflet.heat/develop/dist/leaflet-heat.js"></script>
 
+<!-- 🔥 Leaflet Heat plugin - FIXED CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-heat/0.2.0/leaflet-heat.js"></script>
+
+<!-- 🔥 Emergency fallback if CDN fails -->
+<script>
+    // Check if heat plugin loaded
+    console.log('🔥 Checking L.heatLayer:', typeof L.heatLayer);
+    
+    if (typeof L.heatLayer === 'undefined') {
+        console.warn('⚠️ Heat plugin not loaded! Trying alternative CDN...');
+        // Dynamic load from alternative CDN
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/leaflet-heat@0.2.0/dist/leaflet-heat.js';
+        script.onload = function() {
+            console.log('✅ Heat plugin loaded from alternative CDN!');
+        };
+        script.onerror = function() {
+            console.error('❌ Both CDNs failed. Using markers only.');
+        };
+        document.head.appendChild(script);
+    }
+</script>
+
+<!-- Your scripts -->
 <script src="js/app.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/map.js"></script>
 <script src="js/voice.js"></script>
 
+<!-- Auto-refresh -->
 <script>
-  // Auto-refresh every 60 seconds
-  setInterval(() => {
-    if (typeof loadRealData === 'function') {
-      console.log('🔄 Auto-refreshing map data...');
-      loadRealData();
-    }
-  }, 60000);
+    setInterval(() => {
+        if (typeof loadRealData === 'function') {
+            console.log('🔄 Auto-refreshing map data...');
+            loadRealData();
+        }
+    }, 60000);
 </script>
-
-</body>
-</html>

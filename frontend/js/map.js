@@ -1,5 +1,5 @@
 // ============================================
-// 🗺️ MAP.JS - REAL DATA + HEATMAP VISIBLE
+// 🗺️ MAP.JS - WITH FALLBACK & DYNAMIC LOADING
 // ============================================
 
 const MAP_API_BASE = "https://agroguard-ai-6xil.onrender.com";
@@ -8,13 +8,59 @@ let map;
 let heatLayer = null;
 let markerLayer = null;
 let currentData = [];
+let isHeatLoaded = false;
+
+// 🔥 CHECK IF HEAT PLUGIN IS LOADED
+function ensureHeatPlugin() {
+    return new Promise((resolve) => {
+        if (typeof L.heatLayer !== 'undefined') {
+            console.log('✅ Heat plugin already loaded!');
+            isHeatLoaded = true;
+            resolve(true);
+            return;
+        }
+
+        console.warn('⚠️ L.heatLayer not defined. Loading from CDN...');
+
+        // Dynamic load from CDN
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet-heat/0.2.0/leaflet-heat.js';
+        script.onload = function () {
+            console.log('✅ Heat plugin loaded dynamically!');
+            isHeatLoaded = true;
+            resolve(true);
+        };
+        script.onerror = function () {
+            console.error('❌ Failed to load heat plugin from CDN!');
+            isHeatLoaded = false;
+            resolve(false);
+        };
+        document.head.appendChild(script);
+
+        // Timeout after 5 seconds
+        setTimeout(() => {
+            if (!isHeatLoaded) {
+                console.warn('⏰ Heat plugin load timeout. Using markers only.');
+                isHeatLoaded = false;
+                resolve(false);
+            }
+        }, 5000);
+    });
+}
 
 // 🔥 Initialize map
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', async function () {
     initMap();
-    loadRealData();
+
+    // Wait for heat plugin to load
+    await ensureHeatPlugin();
+
+    // Load data
+    await loadRealData();
     setupFilters();
     setupRefreshButton();
+
+    console.log('🗺️ Map fully initialized!');
 });
 
 function initMap() {
@@ -33,7 +79,6 @@ function initMap() {
     console.log('🗺️ Map initialized');
 }
 
-// 🔥 LOAD REAL DATA
 // 🔥 LOAD REAL DATA - WITH BETTER ERROR HANDLING
 async function loadRealData() {
     const token = localStorage.getItem('access_token');
@@ -86,6 +131,7 @@ async function loadRealData() {
             showEmptyState();
             document.getElementById('outbreakCount').textContent = '0';
             document.getElementById('farmersAffected').textContent = '0';
+            updateSeverityCounts([]);
         }
 
     } catch (error) {
@@ -114,29 +160,102 @@ function updateMap(data) {
         return;
     }
 
-    // 🔥 CREATE HEATMAP DATA
-    const heatData = data.map(item => {
-        const intensity = item.confidence || item.intensity || 0.5;
-        return [item.latitude, item.longitude, intensity];
-    });
+    // 🔥 SAFETY CHECK - If heat not loaded, use markers only
+    if (!isHeatLoaded || typeof L.heatLayer === 'undefined') {
+        console.warn('⚠️ Heat plugin not available. Showing markers only.');
+        addMarkersOnly(data);
+        showNotification('Showing disease markers (heatmap unavailable)', 'info');
+        return;
+    }
 
-    console.log('🔥 Heatmap points:', heatData.length);
+    try {
+        // 🔥 CREATE HEATMAP DATA
+        const heatData = data.map(item => {
+            const intensity = item.confidence || item.intensity || 0.5;
+            return [item.latitude, item.longitude, intensity];
+        });
 
-    // 🔥 ADD HEATMAP LAYER
-    heatLayer = L.heatLayer(heatData, {
-        radius: 30,
-        blur: 20,
-        maxZoom: 10,
-        gradient: {
-            0.2: '#22c55e',   // Green - Low
-            0.4: '#eab308',   // Yellow - Medium
-            0.6: '#f97316',   // Orange - High
-            0.8: '#ef4444',   // Red - Critical
-            1.0: '#7f1d1d'    // Dark Red - Severe
-        }
-    }).addTo(map);
+        console.log('🔥 Heatmap points:', heatData.length);
+
+        // 🔥 ADD HEATMAP LAYER
+        heatLayer = L.heatLayer(heatData, {
+            radius: 30,
+            blur: 20,
+            maxZoom: 10,
+            gradient: {
+                0.2: '#22c55e',   // Green - Low
+                0.4: '#eab308',   // Yellow - Medium
+                0.6: '#f97316',   // Orange - High
+                0.8: '#ef4444',   // Red - Critical
+                1.0: '#7f1d1d'    // Dark Red - Severe
+            }
+        }).addTo(map);
+
+        console.log('✅ Heatmap added successfully!');
+
+    } catch (error) {
+        console.error('❌ Error adding heatmap:', error);
+        // Fallback to markers only
+        addMarkersOnly(data);
+        showNotification('Heatmap error. Showing markers only.', 'warning');
+        return;
+    }
 
     // 🔥 ADD MARKERS (small dots)
+    addMarkers(data);
+}
+
+// 🔥 ADD MARKERS ONLY (Fallback when heatmap fails)
+function addMarkersOnly(data) {
+    console.log('📍 Showing markers only (fallback mode)');
+
+    markerLayer = L.layerGroup();
+
+    data.forEach(item => {
+        const color = getDiseaseColor(item.disease_name);
+        const marker = L.circleMarker([item.latitude, item.longitude], {
+            radius: 10,
+            fillColor: color,
+            color: '#ffffff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.9
+        });
+
+        const popupHTML = `
+            <div style="font-family: sans-serif; max-width: 220px;">
+                <h4 style="color: #4caf50; margin: 0 0 4px 0;">🌿 ${item.disease_name || 'Unknown'}</h4>
+                <p style="margin: 2px 0; font-size: 12px;">
+                    <strong>Confidence:</strong> ${(item.confidence * 100).toFixed(1)}%
+                </p>
+                <p style="margin: 2px 0; font-size: 12px;">
+                    <strong>Location:</strong> ${item.location_name || 'Unknown'}
+                </p>
+                <p style="margin: 2px 0; font-size: 11px; color: #888;">
+                    ${item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
+                </p>
+            </div>
+        `;
+
+        marker.bindPopup(popupHTML);
+        markerLayer.addLayer(marker);
+    });
+
+    markerLayer.addTo(map);
+
+    // Fit bounds
+    if (data.length > 1) {
+        try {
+            const bounds = data.map(d => [d.latitude, d.longitude]);
+            map.fitBounds(L.latLngBounds(bounds), { padding: [50, 50] });
+        } catch (e) {
+            console.warn('Could not fit bounds:', e);
+        }
+    }
+}
+
+// 🔥 ADD MARKERS WITH HEATMAP
+function addMarkers(data) {
     markerLayer = L.layerGroup();
 
     data.forEach(item => {
@@ -159,7 +278,7 @@ function updateMap(data) {
                 <p style="margin: 2px 0; font-size: 12px;">
                     <strong>Location:</strong> ${item.location_name || 'Unknown'}
                 </p>
-                <p style="margin: 2px 0; font-size: 11px; color: #666;">
+                <p style="margin: 2px 0; font-size: 11px; color: #888;">
                     ${item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
                 </p>
             </div>
@@ -173,8 +292,12 @@ function updateMap(data) {
 
     // Fit bounds
     if (data.length > 1) {
-        const bounds = data.map(d => [d.latitude, d.longitude]);
-        map.fitBounds(L.latLngBounds(bounds), { padding: [50, 50] });
+        try {
+            const bounds = data.map(d => [d.latitude, d.longitude]);
+            map.fitBounds(L.latLngBounds(bounds), { padding: [50, 50] });
+        } catch (e) {
+            console.warn('Could not fit bounds:', e);
+        }
     }
 }
 
@@ -188,30 +311,32 @@ function getDiseaseColor(diseaseName) {
     if (name.includes('rust')) return '#eab308';
     if (name.includes('spot')) return '#8b5cf6';
     if (name.includes('mildew')) return '#a855f7';
+    if (name.includes('mosaic')) return '#ec4899';
+    if (name.includes('yellow')) return '#fbbf24';
     return '#6b7280';
 }
 
 // 🔥 UPDATE STATS
 function updateStats(data) {
-    const totalEl = document.getElementById('totalOutbreaks');
+    const totalEl = document.getElementById('outbreakCount');
     const farmersEl = document.getElementById('farmersAffected');
-    const severityEl = document.getElementById('severityLevels');
 
-    if (totalEl) totalEl.textContent = data.length;
-    if (farmersEl) farmersEl.textContent = (data.length * 10) + '+';
+    if (totalEl) totalEl.textContent = data.length || '0';
+    if (farmersEl) farmersEl.textContent = data.length ? (data.length * 10) + '+' : '0';
 
-    if (severityEl) {
-        const critical = data.filter(d => d.confidence > 0.8).length;
-        const high = data.filter(d => d.confidence > 0.6 && d.confidence <= 0.8).length;
-        const medium = data.filter(d => d.confidence > 0.4 && d.confidence <= 0.6).length;
-        const low = data.filter(d => d.confidence <= 0.4).length;
-        severityEl.innerHTML = `
-            <span style="color:#7f1d1d;">🔴 Critical: ${critical}</span><br>
-            <span style="color:#ef4444;">🟠 High: ${high}</span><br>
-            <span style="color:#eab308;">🟡 Medium: ${medium}</span><br>
-            <span style="color:#22c55e;">🟢 Low: ${low}</span>
-        `;
-    }
+    updateSeverityCounts(data);
+}
+
+function updateSeverityCounts(data) {
+    const critical = data.filter(d => d.confidence > 0.8).length || 0;
+    const high = data.filter(d => d.confidence > 0.6 && d.confidence <= 0.8).length || 0;
+    const medium = data.filter(d => d.confidence > 0.4 && d.confidence <= 0.6).length || 0;
+    const low = data.filter(d => d.confidence <= 0.4).length || 0;
+
+    document.getElementById('criticalCount').textContent = critical;
+    document.getElementById('highCount').textContent = high;
+    document.getElementById('mediumCount').textContent = medium;
+    document.getElementById('lowCount').textContent = low;
 }
 
 // 🔥 FILTERS
@@ -231,6 +356,15 @@ function setupFilters() {
         });
     }
 
+    const daysFilter = document.getElementById('daysFilter');
+    if (daysFilter) {
+        daysFilter.addEventListener('change', function () {
+            const days = parseInt(this.value);
+            loadDataForDays(days);
+        });
+    }
+
+    // Time period buttons (if any)
     document.querySelectorAll('.time-btn').forEach(btn => {
         btn.addEventListener('click', function () {
             document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
@@ -239,33 +373,57 @@ function setupFilters() {
             loadDataForDays(days);
         });
     });
+
+    // Toggle heatmap button
+    const toggleBtn = document.getElementById('toggleHeatmap');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function () {
+            if (currentData.length > 0) {
+                updateMap(currentData);
+                showNotification('🔄 Map updated!', 'success');
+            } else {
+                showNotification('No data to display. Scan some leaves!', 'warning');
+            }
+        });
+    }
 }
 
 async function loadDataForDays(days) {
     const token = localStorage.getItem('access_token');
-    if (!token) return;
+    if (!token) {
+        showNotification('Please login first', 'warning');
+        return;
+    }
 
     try {
         const response = await fetch(`${MAP_API_BASE}/scans/outbreak?days=${days}`, {
             headers: { 'Authorization': 'Bearer ' + token }
         });
+
+        if (!response.ok) throw new Error('Failed to load data');
+
         const data = await response.json();
         currentData = data;
         updateMap(data);
         updateStats(data);
         showNotification(`✅ ${data.length} points (${days} days)`, 'success');
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Error loading data:', error);
+        showNotification('Error loading data: ' + error.message, 'error');
     }
 }
 
 function setupRefreshButton() {
-    const refreshBtn = document.getElementById('refreshData');
+    const refreshBtn = document.getElementById('refreshMap');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', function () {
             this.textContent = '⏳ Loading...';
+            this.disabled = true;
             loadRealData();
-            setTimeout(() => { this.textContent = '🔄 Refresh Data'; }, 2000);
+            setTimeout(() => {
+                this.textContent = '🔄 Refresh';
+                this.disabled = false;
+            }, 2000);
         });
     }
 }
@@ -292,6 +450,7 @@ function showEmptyState() {
         text-align: center;
         z-index: 1000;
         max-width: 350px;
+        pointer-events: none;
     `;
     msg.innerHTML = `
         <div style="font-size: 3rem; margin-bottom: 10px;">🗺️</div>
@@ -300,7 +459,7 @@ function showEmptyState() {
             Scan some leaves to generate outbreak data.<br>
             Real-time disease spread will appear here.
         </p>
-        <a href="/" style="display: inline-block; padding: 10px 24px; background: #4caf50; color: white; border-radius: 8px; text-decoration: none; font-weight: 500;">
+        <a href="/" style="display: inline-block; padding: 10px 24px; background: #4caf50; color: white; border-radius: 8px; text-decoration: none; font-weight: 500; pointer-events: auto;">
             📸 Scan Now
         </a>
     `;
@@ -312,9 +471,18 @@ function showNotification(message, type = 'info') {
     if (typeof notify === 'function') {
         notify(message, type);
     } else {
+        const colors = {
+            success: '#22c55e',
+            error: '#ef4444',
+            warning: '#f59e0b',
+            info: '#3b82f6'
+        };
         console.log(`[${type}] ${message}`);
+        // Simple alert fallback
+        if (type === 'error') {
+            alert(message);
+        }
     }
 }
-
 
 console.log('🗺️ Map.js loaded with real data + heatmap!');
