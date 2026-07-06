@@ -1,107 +1,101 @@
 // ============================================
-// 🗺️ MAP.JS - REAL DATA FROM BACKEND
+// 🗺️ MAP.JS - REAL DATA + HEATMAP VISIBLE
 // ============================================
 
 const MAP_API_BASE = "https://agroguard-ai-6xil.onrender.com";
 
 let map;
-let heatmapLayer;
-let markerLayer;
+let heatLayer = null;
+let markerLayer = null;
 let currentData = [];
-let currentFilter = 'all';
 
 // 🔥 Initialize map
 document.addEventListener('DOMContentLoaded', function () {
     initMap();
     loadRealData();
     setupFilters();
+    setupRefreshButton();
 });
 
 function initMap() {
-    // India center coordinates
-    const indiaCenter = [20.5937, 78.9629];
+    // India center
+    map = L.map('map', {
+        center: [20.5937, 78.9629],
+        zoom: 5,
+        zoomControl: true
+    });
 
-    map = L.map('map').setView(indiaCenter, 5);
-
-    // Add tile layer
+    // Tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors'
     }).addTo(map);
+
+    console.log('🗺️ Map initialized');
 }
 
-// 🔥 LOAD REAL DATA FROM BACKEND
+// 🔥 LOAD REAL DATA
 async function loadRealData() {
     const token = localStorage.getItem('access_token');
     if (!token) {
-        console.warn('⚠️ No token found, showing empty map');
-        showNotification('Please login to view outbreak data', 'warning');
+        showNotification('Please login first', 'warning');
         return;
     }
 
     try {
         const response = await fetch(`${MAP_API_BASE}/scans/outbreak?days=30`, {
-            headers: {
-                'Authorization': 'Bearer ' + token
-            }
+            headers: { 'Authorization': 'Bearer ' + token }
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
+        if (!response.ok) throw new Error('Failed to load data');
 
         const data = await response.json();
-        console.log('📍 Real Data Loaded:', data);
+        console.log('📍 Data loaded:', data.length, 'points');
 
         if (data && data.length > 0) {
             currentData = data;
             updateMap(data);
+            updateStats(data);
             showNotification(`✅ ${data.length} outbreak points loaded`, 'success');
         } else {
-            console.warn('⚠️ No outbreak data found');
-            showNotification('No outbreak data available. Scan some leaves!', 'info');
-            // Show empty map with message
             showEmptyState();
+            showNotification('No outbreak data. Scan some leaves!', 'info');
         }
 
     } catch (error) {
-        console.error('❌ Error loading outbreak data:', error);
-        showNotification('Error loading data: ' + error.message, 'error');
-        showEmptyState();
+        console.error('❌ Error:', error);
+        showNotification('Error loading data', 'error');
     }
 }
 
+// 🔥 UPDATE MAP WITH HEATMAP
 function updateMap(data) {
-    // Clear existing layers
-    if (heatmapLayer) {
-        map.removeLayer(heatmapLayer);
+    // Clear old layers
+    if (heatLayer) {
+        map.removeLayer(heatLayer);
+        heatLayer = null;
     }
     if (markerLayer) {
         map.removeLayer(markerLayer);
+        markerLayer = null;
     }
 
-    // Filter data if needed
-    let filteredData = data;
-    if (currentFilter !== 'all') {
-        filteredData = data.filter(item =>
-            item.disease_name?.toLowerCase().includes(currentFilter.toLowerCase())
-        );
-    }
-
-    if (filteredData.length === 0) {
-        showNotification('No data for selected filter', 'info');
+    if (!data || data.length === 0) {
+        showEmptyState();
         return;
     }
 
-    // 🔥 Create heatmap data
-    const heatData = filteredData.map(item => {
+    // 🔥 CREATE HEATMAP DATA
+    const heatData = data.map(item => {
         const intensity = item.confidence || item.intensity || 0.5;
         return [item.latitude, item.longitude, intensity];
     });
 
-    // Add heatmap layer
-    heatmapLayer = L.heatLayer(heatData, {
-        radius: 25,
-        blur: 15,
+    console.log('🔥 Heatmap points:', heatData.length);
+
+    // 🔥 ADD HEATMAP LAYER
+    heatLayer = L.heatLayer(heatData, {
+        radius: 30,
+        blur: 20,
         maxZoom: 10,
         gradient: {
             0.2: '#22c55e',   // Green - Low
@@ -112,50 +106,51 @@ function updateMap(data) {
         }
     }).addTo(map);
 
-    // Add markers with popups
+    // 🔥 ADD MARKERS (small dots)
     markerLayer = L.layerGroup();
-    filteredData.forEach(item => {
+
+    data.forEach(item => {
+        const color = getDiseaseColor(item.disease_name);
         const marker = L.circleMarker([item.latitude, item.longitude], {
-            radius: 8,
-            fillColor: getColorByDisease(item.disease_name),
-            color: '#fff',
-            weight: 1,
+            radius: 6,
+            fillColor: color,
+            color: '#ffffff',
+            weight: 1.5,
             opacity: 1,
             fillOpacity: 0.8
         });
 
-        // Popup content
-        const popupContent = `
-            <div style="max-width:250px; font-family: sans-serif;">
-                <h4 style="color:#4caf50; margin:0 0 5px 0;">🌿 ${item.disease_name || 'Unknown Disease'}</h4>
-                <p style="margin:2px 0; font-size:12px;">
+        const popupHTML = `
+            <div style="font-family: sans-serif; max-width: 220px;">
+                <h4 style="color: #4caf50; margin: 0 0 4px 0;">🌿 ${item.disease_name || 'Unknown'}</h4>
+                <p style="margin: 2px 0; font-size: 12px;">
                     <strong>Confidence:</strong> ${(item.confidence * 100).toFixed(1)}%
                 </p>
-                <p style="margin:2px 0; font-size:12px;">
+                <p style="margin: 2px 0; font-size: 12px;">
                     <strong>Location:</strong> ${item.location_name || 'Unknown'}
                 </p>
-                <p style="margin:2px 0; font-size:11px; color:#666;">
-                    ${new Date(item.created_at).toLocaleDateString()}
+                <p style="margin: 2px 0; font-size: 11px; color: #666;">
+                    ${item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
                 </p>
             </div>
         `;
 
-        marker.bindPopup(popupContent);
+        marker.bindPopup(popupHTML);
         markerLayer.addLayer(marker);
     });
+
     markerLayer.addTo(map);
 
-    // Fit map to data bounds
-    if (filteredData.length > 0) {
-        const bounds = filteredData.map(d => [d.latitude, d.longitude]);
-        const latLngBounds = L.latLngBounds(bounds);
-        map.fitBounds(latLngBounds, { padding: [50, 50] });
+    // Fit bounds
+    if (data.length > 1) {
+        const bounds = data.map(d => [d.latitude, d.longitude]);
+        map.fitBounds(L.latLngBounds(bounds), { padding: [50, 50] });
     }
 }
 
-function getColorByDisease(diseaseName) {
+// 🔥 GET COLOR BY DISEASE
+function getDiseaseColor(diseaseName) {
     if (!diseaseName) return '#6b7280';
-
     const name = diseaseName.toLowerCase();
     if (name.includes('late blight')) return '#ef4444';
     if (name.includes('early blight')) return '#f97316';
@@ -166,30 +161,57 @@ function getColorByDisease(diseaseName) {
     return '#6b7280';
 }
 
+// 🔥 UPDATE STATS
+function updateStats(data) {
+    const totalEl = document.getElementById('totalOutbreaks');
+    const farmersEl = document.getElementById('farmersAffected');
+    const severityEl = document.getElementById('severityLevels');
+
+    if (totalEl) totalEl.textContent = data.length;
+    if (farmersEl) farmersEl.textContent = (data.length * 10) + '+';
+
+    if (severityEl) {
+        const critical = data.filter(d => d.confidence > 0.8).length;
+        const high = data.filter(d => d.confidence > 0.6 && d.confidence <= 0.8).length;
+        const medium = data.filter(d => d.confidence > 0.4 && d.confidence <= 0.6).length;
+        const low = data.filter(d => d.confidence <= 0.4).length;
+        severityEl.innerHTML = `
+            <span style="color:#7f1d1d;">🔴 Critical: ${critical}</span><br>
+            <span style="color:#ef4444;">🟠 High: ${high}</span><br>
+            <span style="color:#eab308;">🟡 Medium: ${medium}</span><br>
+            <span style="color:#22c55e;">🟢 Low: ${low}</span>
+        `;
+    }
+}
+
+// 🔥 FILTERS
 function setupFilters() {
     const filterSelect = document.getElementById('diseaseFilter');
     if (filterSelect) {
         filterSelect.addEventListener('change', function () {
-            currentFilter = this.value;
-            if (currentData.length > 0) {
+            const value = this.value;
+            if (value === 'all') {
                 updateMap(currentData);
+            } else {
+                const filtered = currentData.filter(d =>
+                    d.disease_name?.toLowerCase().includes(value.toLowerCase())
+                );
+                updateMap(filtered);
             }
         });
     }
 
-    // Time period buttons
     document.querySelectorAll('.time-btn').forEach(btn => {
         btn.addEventListener('click', function () {
             document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
             this.classList.add('active');
-
             const days = parseInt(this.dataset.days);
-            loadRealDataForDays(days);
+            loadDataForDays(days);
         });
     });
 }
 
-async function loadRealDataForDays(days) {
+async function loadDataForDays(days) {
     const token = localStorage.getItem('access_token');
     if (!token) return;
 
@@ -197,46 +219,66 @@ async function loadRealDataForDays(days) {
         const response = await fetch(`${MAP_API_BASE}/scans/outbreak?days=${days}`, {
             headers: { 'Authorization': 'Bearer ' + token }
         });
-
-        if (response.ok) {
-            const data = await response.json();
-            currentData = data;
-            updateMap(data);
-            showNotification(`✅ ${data.length} points loaded (${days} days)`, 'success');
-        }
+        const data = await response.json();
+        currentData = data;
+        updateMap(data);
+        updateStats(data);
+        showNotification(`✅ ${data.length} points (${days} days)`, 'success');
     } catch (error) {
-        console.error('Error loading data:', error);
+        console.error('Error:', error);
+    }
+}
+
+function setupRefreshButton() {
+    const refreshBtn = document.getElementById('refreshData');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function () {
+            this.textContent = '⏳ Loading...';
+            loadRealData();
+            setTimeout(() => { this.textContent = '🔄 Refresh Data'; }, 2000);
+        });
     }
 }
 
 function showEmptyState() {
-    // Show message on map
-    const emptyMsg = document.createElement('div');
-    emptyMsg.id = 'emptyMapMsg';
-    emptyMsg.style.cssText = `
+    // Remove old empty message
+    const oldMsg = document.getElementById('emptyMapMsg');
+    if (oldMsg) oldMsg.remove();
+
+    const container = document.getElementById('map');
+    if (!container) return;
+
+    const msg = document.createElement('div');
+    msg.id = 'emptyMapMsg';
+    msg.style.cssText = `
         position: absolute;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        background: rgba(0,0,0,0.8);
+        background: rgba(0,0,0,0.85);
         color: white;
-        padding: 30px;
+        padding: 30px 40px;
         border-radius: 16px;
         text-align: center;
         z-index: 1000;
         max-width: 350px;
     `;
-    emptyMsg.innerHTML = `
+    msg.innerHTML = `
         <div style="font-size: 3rem; margin-bottom: 10px;">🗺️</div>
-        <h3>No Outbreak Data</h3>
-        <p style="font-size: 0.9rem; color: #aaa;">Scan some leaves to generate outbreak data. Real-time disease spread will appear here.</p>
-        <a href="/" style="display: inline-block; margin-top: 10px; padding: 8px 20px; background: #4caf50; color: white; border-radius: 8px; text-decoration: none;">Scan Now</a>
+        <h3 style="margin: 0 0 10px 0;">No Outbreak Data</h3>
+        <p style="font-size: 0.9rem; color: #aaa; margin: 0 0 15px 0;">
+            Scan some leaves to generate outbreak data.<br>
+            Real-time disease spread will appear here.
+        </p>
+        <a href="/" style="display: inline-block; padding: 10px 24px; background: #4caf50; color: white; border-radius: 8px; text-decoration: none; font-weight: 500;">
+            📸 Scan Now
+        </a>
     `;
-    document.getElementById('map-container')?.appendChild(emptyMsg);
+    container.style.position = 'relative';
+    container.appendChild(msg);
 }
 
 function showNotification(message, type = 'info') {
-    // Use your existing notify function
     if (typeof notify === 'function') {
         notify(message, type);
     } else {
@@ -244,4 +286,5 @@ function showNotification(message, type = 'info') {
     }
 }
 
-console.log('🗺️ Map.js loaded with real data!');
+
+console.log('🗺️ Map.js loaded with real data + heatmap!');
