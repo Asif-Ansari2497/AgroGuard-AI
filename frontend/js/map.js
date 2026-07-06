@@ -34,22 +34,46 @@ function initMap() {
 }
 
 // 🔥 LOAD REAL DATA
+// 🔥 LOAD REAL DATA - WITH BETTER ERROR HANDLING
 async function loadRealData() {
     const token = localStorage.getItem('access_token');
+
+    console.log('🔑 Token:', token ? '✅ Present' : '❌ Missing');
+
     if (!token) {
-        showNotification('Please login first', 'warning');
+        showNotification('⚠️ Please login first to view outbreak data', 'warning');
+        document.getElementById('outbreakCount').textContent = '0';
+        document.getElementById('farmersAffected').textContent = '0';
+        showEmptyState();
         return;
     }
 
     try {
-        const response = await fetch(`${MAP_API_BASE}/scans/outbreak?days=30`, {
-            headers: { 'Authorization': 'Bearer ' + token }
+        const days = document.getElementById('daysFilter')?.value || 30;
+        const url = `${MAP_API_BASE}/scans/outbreak?days=${days}`;
+        console.log('📡 Fetching:', url);
+
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Content-Type': 'application/json'
+            }
         });
 
-        if (!response.ok) throw new Error('Failed to load data');
+        console.log('📡 Response status:', response.status);
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                showNotification('⚠️ Session expired. Please login again.', 'error');
+                localStorage.removeItem('access_token');
+                window.location.href = '/';
+                return;
+            }
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
 
         const data = await response.json();
-        console.log('📍 Data loaded:', data.length, 'points');
+        console.log('📍 Data received:', data.length, 'points');
 
         if (data && data.length > 0) {
             currentData = data;
@@ -57,13 +81,19 @@ async function loadRealData() {
             updateStats(data);
             showNotification(`✅ ${data.length} outbreak points loaded`, 'success');
         } else {
-            showEmptyState();
+            console.warn('⚠️ No outbreak data found');
             showNotification('No outbreak data. Scan some leaves!', 'info');
+            showEmptyState();
+            document.getElementById('outbreakCount').textContent = '0';
+            document.getElementById('farmersAffected').textContent = '0';
         }
 
     } catch (error) {
-        console.error('❌ Error:', error);
-        showNotification('Error loading data', 'error');
+        console.error('❌ Error loading data:', error);
+        showNotification('Error loading data: ' + error.message, 'error');
+        document.getElementById('outbreakCount').textContent = '0';
+        document.getElementById('farmersAffected').textContent = '0';
+        showEmptyState();
     }
 }
 
