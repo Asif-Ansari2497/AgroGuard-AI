@@ -285,6 +285,7 @@ async function loadHistory() {
   }
 }
 
+
 function showScanDetails(scan) {
   let diseaseName = (scan.disease_name || 'Unknown').replace('Tomato_', '').replace(/_/g, ' ');
   document.getElementById('detailDisease').innerText = diseaseName;
