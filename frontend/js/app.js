@@ -422,8 +422,9 @@ if (window._APP_INITIALIZED) {
     window._APP_INITIALIZED = true;
     console.log('✅ App initializing first time');
 }
+
 // ============================================
-// 📄 PDF GENERATOR - COMPLETE CLEAN VERSION
+// 📄 PDF GENERATOR - COMPLETE CLEAN VERSION WITH LEAF PHOTO
 // ============================================
 
 function cleanPDFText(text) {
@@ -452,104 +453,181 @@ function cleanPDFText(text) {
     return cleaned;
 }
 
-function generateCleanPDF(result) {
-    const disease = cleanPDFText(result.disease) || 'Unknown Disease';
-    const severity = cleanPDFText(result.severity) || 'Unknown';
-    const confidence = result.confidence ? (result.confidence * 100).toFixed(1) + '%' : 'N/A';
-    const description = cleanPDFText(result.description) || 'No description available.';
-    const treatment = cleanPDFText(result.treatment) || 'No treatment available.';
-    const prevention = cleanPDFText(result.prevention) || 'No prevention available.';
+// ============================================
+// 📄 PDF GENERATION - WITH LEAF PHOTO
+// ============================================
+
+function generatePDF(result) {
+    console.log('📄 Generating PDF with leaf photo...');
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = 210;
     let y = 20;
 
-    // Date
-    doc.setFontSize(11);
-    doc.setTextColor(100, 100, 100);
-    doc.text(new Date().toLocaleDateString('en-IN'), 170, y);
+    // Clean data
+    const disease = cleanPDFText(result.disease) || 'Unknown Disease';
+    const confidence = result.confidence ? (result.confidence * 100).toFixed(1) + '%' : 'N/A';
+    const severity = cleanPDFText(result.severity) || 'Unknown';
+    const description = cleanPDFText(result.description) || 'No description available.';
+    const treatment = cleanPDFText(result.treatment) || 'No treatment available.';
+    const prevention = cleanPDFText(result.prevention) || 'No prevention available.';
+    const farmerName = localStorage.getItem('userName') || 'Farmer';
+
+    // ===== HEADER: Date =====
+    doc.setFontSize(10);
+    doc.setTextColor(150, 150, 150);
+    const today = new Date();
+    const dateStr = today.getDate() + '/' + (today.getMonth() + 1) + '/' + today.getFullYear();
+    doc.text(dateStr, pageWidth - 25, y);
     y += 10;
 
-    // Title
-    doc.setFontSize(28);
+    // ===== TITLE: Disease =====
+    doc.setFontSize(26);
     doc.setTextColor(0, 0, 0);
     doc.text(disease, 20, y);
     y += 12;
 
-    // Severity
-    const colors = { 'low': [0, 128, 0], 'medium': [255, 165, 0], 'high': [255, 0, 0], 'critical': [200, 0, 0] };
-    const color = colors[severity.toLowerCase()] || [0, 0, 0];
-    doc.setFontSize(14);
+    // ===== SEVERITY =====
+    const severityColors = {
+        'low': [0, 128, 0],
+        'medium': [255, 165, 0],
+        'high': [255, 0, 0],
+        'critical': [180, 0, 0]
+    };
+    const color = severityColors[severity.toLowerCase()] || [0, 0, 0];
+    doc.setFontSize(13);
     doc.setTextColor(color[0], color[1], color[2]);
     doc.text(severity.toUpperCase(), 20, y);
     y += 8;
 
-    // Confidence
-    doc.setFontSize(12);
+    // ===== CONFIDENCE =====
+    doc.setFontSize(11);
     doc.setTextColor(100, 100, 100);
     doc.text(`Confidence: ${confidence}`, 20, y);
-    y += 12;
+    y += 8;
 
-    // Farmer
-    const farmerName = localStorage.getItem('userName') || 'Farmer';
-    doc.setFontSize(11);
+    // ===== FARMER NAME =====
+    doc.setFontSize(10);
     doc.setTextColor(80, 80, 80);
     doc.text(`Farmer: ${farmerName}`, 20, y);
     y += 12;
 
-    // Divider
+    // ===== DIVIDER =====
     doc.setDrawColor(200, 200, 200);
-    doc.line(20, y, 190, y);
+    doc.line(20, y, pageWidth - 20, y);
     y += 10;
 
-    // Description
-    doc.setFontSize(16);
-    doc.setTextColor(0, 0, 0);
-    doc.text('DESCRIPTION', 20, y);
-    y += 8;
-    doc.setFontSize(11);
-    doc.setTextColor(50, 50, 50);
-    const descLines = doc.splitTextToSize(description, 170);
-    doc.text(descLines, 20, y);
-    y += (descLines.length * 5.5) + 10;
+    // ===== LEAF PHOTO (from preview) =====
+    const previewImg = document.getElementById('imagePreview');
+    if (previewImg && previewImg.src && previewImg.src.startsWith('data:image')) {
+        try {
+            // Add leaf image with proper dimensions
+            const imgWidth = 80;
+            const imgHeight = 80;
+            const imgX = (pageWidth - imgWidth) / 2;
+            doc.addImage(previewImg.src, 'JPEG', imgX, y, imgWidth, imgHeight);
+            y += imgHeight + 10;
 
-    // Treatment
-    doc.setFontSize(16);
-    doc.setTextColor(0, 0, 0);
-    doc.text('TREATMENT PLAN', 20, y);
-    y += 8;
-    doc.setFontSize(11);
-    doc.setTextColor(50, 50, 50);
-    const treatLines = doc.splitTextToSize(treatment, 170);
-    doc.text(treatLines, 20, y);
-    y += (treatLines.length * 5.5) + 10;
+            // Add "Scanned Leaf" caption
+            doc.setFontSize(9);
+            doc.setTextColor(150, 150, 150);
+            doc.text('Scanned Leaf', pageWidth / 2, y, { align: 'center' });
+            y += 10;
+        } catch (e) {
+            console.warn('⚠️ Could not add leaf image:', e);
+        }
+    } else {
+        // Try capture preview for camera mode
+        const capturePreview = document.getElementById('capturePreview');
+        if (capturePreview && capturePreview.src && capturePreview.src.startsWith('data:image')) {
+            try {
+                const imgWidth = 80;
+                const imgHeight = 80;
+                const imgX = (pageWidth - imgWidth) / 2;
+                doc.addImage(capturePreview.src, 'JPEG', imgX, y, imgWidth, imgHeight);
+                y += imgHeight + 10;
 
-    // Prevention (new page if needed)
-    if (y > 230) { doc.addPage(); y = 20; }
+                doc.setFontSize(9);
+                doc.setTextColor(150, 150, 150);
+                doc.text('Scanned Leaf', pageWidth / 2, y, { align: 'center' });
+                y += 10;
+            } catch (e) {
+                console.warn('⚠️ Could not add capture image:', e);
+            }
+        }
+    }
 
-    doc.setFontSize(16);
-    doc.setTextColor(0, 0, 0);
-    doc.text('PREVENTION', 20, y);
-    y += 8;
-    doc.setFontSize(11);
-    doc.setTextColor(50, 50, 50);
-    const prevLines = doc.splitTextToSize(prevention, 170);
-    doc.text(prevLines, 20, y);
-    y += (prevLines.length * 5.5) + 10;
+    // ===== DIVIDER =====
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, y, pageWidth - 20, y);
+    y += 10;
 
-    // Footer
+    // ===== DESCRIPTION =====
+    if (description) {
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.text('DESCRIPTION', 20, y);
+        y += 7;
+        doc.setFontSize(10);
+        doc.setTextColor(50, 50, 50);
+        const descLines = doc.splitTextToSize(description, 170);
+        doc.text(descLines, 20, y);
+        y += (descLines.length * 5) + 10;
+    }
+
+    // ===== TREATMENT =====
+    if (treatment) {
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.text('TREATMENT PLAN', 20, y);
+        y += 7;
+        doc.setFontSize(10);
+        doc.setTextColor(50, 50, 50);
+        const treatLines = doc.splitTextToSize(treatment, 170);
+        doc.text(treatLines, 20, y);
+        y += (treatLines.length * 5) + 10;
+    }
+
+    // ===== NEW PAGE IF NEEDED =====
+    if (y > 230) {
+        doc.addPage();
+        y = 20;
+    }
+
+    // ===== PREVENTION =====
+    if (prevention) {
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.text('PREVENTION', 20, y);
+        y += 7;
+        doc.setFontSize(10);
+        doc.setTextColor(50, 50, 50);
+        const prevLines = doc.splitTextToSize(prevention, 170);
+        doc.text(prevLines, 20, y);
+        y += (prevLines.length * 5) + 10;
+    }
+
+    // ===== FOOTER =====
     y = 275;
     doc.setDrawColor(200, 200, 200);
-    doc.line(20, y, 190, y);
+    doc.line(20, y, pageWidth - 20, y);
     y += 5;
-    doc.setFontSize(9);
+
+    doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
     doc.text('🌾 AgroGuard AI - Diagnose. Treat. Save the Harvest.', 20, y + 5);
-    doc.text('Made in India 🇮🇳 | v1.0', 20, y + 12);
-    doc.text('Disclaimer: Consult a local agronomist for critical cases.', 20, y + 19);
+    doc.text('Made in India 🇮🇳 | v1.0', 20, y + 11);
+    doc.text('Disclaimer: Consult a local agronomist for critical cases.', 20, y + 17);
 
-    doc.save(`AgroGuard_${disease.replace(/\s+/g, '_')}.pdf`);
-    if (typeof notify === 'function') notify('📄 PDF downloaded!', 'success');
+    // ===== SAVE =====
+    const fileName = `AgroGuard_${disease.replace(/\s+/g, '_')}.pdf`;
+    doc.save(fileName);
+    console.log('✅ PDF saved:', fileName);
+
+    if (typeof notify === 'function') {
+        notify('📄 PDF downloaded successfully!', 'success');
+    }
 }
 
 console.log('✅ Clean PDF Generator Ready!');
@@ -596,7 +674,7 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 // ============================================
-// 📄 PDF GENERATOR - ADD THIS TO app.js
+// 📄 PDF BUTTON - FIXED
 // ============================================
 
 console.log('🔥 Loading PDF Generator...');
@@ -661,119 +739,5 @@ document.addEventListener('DOMContentLoaded', function () {
 
     }, 500);
 });
-
-// ============================================
-// 📄 PDf Generation Function
-// ============================================
-
-function generatePDF(result) {
-    console.log('📄 Generating PDF...');
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF('p', 'mm', 'a4');
-    const pageWidth = 210;
-    let y = 20;
-
-    // Clean data
-    const disease = result.disease || 'Unknown Disease';
-    const confidence = result.confidence ? (result.confidence * 100).toFixed(1) + '%' : 'N/A';
-    const severity = result.severity || 'Unknown';
-    const description = result.description || 'No description available.';
-    const treatment = result.treatment || 'No treatment available.';
-    const prevention = result.prevention || 'No prevention available.';
-    const farmerName = localStorage.getItem('userName') || 'Farmer';
-
-    // Date
-    doc.setFontSize(11);
-    doc.setTextColor(100, 100, 100);
-    doc.text(new Date().toLocaleDateString('en-IN'), pageWidth - 30, y);
-    y += 10;
-
-    // Title
-    doc.setFontSize(28);
-    doc.setTextColor(0, 0, 0);
-    doc.text(disease, 20, y);
-    y += 12;
-
-    // Severity
-    const colors = { 'low': [0, 128, 0], 'medium': [255, 165, 0], 'high': [255, 0, 0], 'critical': [200, 0, 0] };
-    const color = colors[severity.toLowerCase()] || [0, 0, 0];
-    doc.setFontSize(14);
-    doc.setTextColor(color[0], color[1], color[2]);
-    doc.text(severity.toUpperCase(), 20, y);
-    y += 8;
-
-    // Confidence
-    doc.setFontSize(12);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Confidence: ${confidence}`, 20, y);
-    y += 8;
-
-    // Farmer
-    doc.setFontSize(11);
-    doc.setTextColor(80, 80, 80);
-    doc.text(`Farmer: ${farmerName}`, 20, y);
-    y += 12;
-
-    // Divider
-    doc.setDrawColor(200, 200, 200);
-    doc.line(20, y, pageWidth - 20, y);
-    y += 10;
-
-    // Description
-    doc.setFontSize(16);
-    doc.setTextColor(0, 0, 0);
-    doc.text('DESCRIPTION', 20, y);
-    y += 8;
-    doc.setFontSize(11);
-    doc.setTextColor(50, 50, 50);
-    const descLines = doc.splitTextToSize(description, 170);
-    doc.text(descLines, 20, y);
-    y += (descLines.length * 5.5) + 10;
-
-    // Treatment
-    doc.setFontSize(16);
-    doc.setTextColor(0, 0, 0);
-    doc.text('TREATMENT PLAN', 20, y);
-    y += 8;
-    doc.setFontSize(11);
-    doc.setTextColor(50, 50, 50);
-    const treatLines = doc.splitTextToSize(treatment, 170);
-    doc.text(treatLines, 20, y);
-    y += (treatLines.length * 5.5) + 10;
-
-    // Prevention (new page if needed)
-    if (y > 230) { doc.addPage(); y = 20; }
-
-    doc.setFontSize(16);
-    doc.setTextColor(0, 0, 0);
-    doc.text('PREVENTION', 20, y);
-    y += 8;
-    doc.setFontSize(11);
-    doc.setTextColor(50, 50, 50);
-    const prevLines = doc.splitTextToSize(prevention, 170);
-    doc.text(prevLines, 20, y);
-    y += (prevLines.length * 5.5) + 10;
-
-    // Footer
-    y = 275;
-    doc.setDrawColor(200, 200, 200);
-    doc.line(20, y, pageWidth - 20, y);
-    y += 5;
-    doc.setFontSize(9);
-    doc.setTextColor(150, 150, 150);
-    doc.text('🌾 AgroGuard AI - Diagnose. Treat. Save the Harvest.', 20, y + 5);
-    doc.text('Made in India 🇮🇳 | v1.0', 20, y + 12);
-    doc.text('Disclaimer: Consult a local agronomist for critical cases.', 20, y + 19);
-
-    // Save
-    const fileName = `AgroGuard_${disease.replace(/\s+/g, '_')}.pdf`;
-    doc.save(fileName);
-    console.log('✅ PDF saved:', fileName);
-
-    if (typeof notify === 'function') {
-        notify('📄 PDF downloaded successfully!', 'success');
-    }
-}
 
 console.log('✅ PDF Generator loaded successfully!');
