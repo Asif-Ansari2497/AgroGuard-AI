@@ -839,3 +839,145 @@ tr:hover td { background: var(--surface2); }
 .disease-description br, .disease-treatment br, .disease-prevention br {
     margin-bottom: 5px;
 }
+
+/* ============================================
+   🎥 DEMO VIDEO SECTION - SIDE BY SIDE
+   ============================================ */
+
+.demo-video-section {
+    padding: 4rem 2rem;
+    background: var(--surface);
+}
+
+.demo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    align-items: center;
+}
+
+/* Left Side - Text */
+.demo-text .badge {
+    display: inline-block;
+    background: rgba(74, 222, 128, 0.15);
+    color: var(--leaf);
+    padding: 0.25rem 1rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.demo-text h2 {
+    font-size: 2rem;
+    margin: 0.5rem 0;
+    font-family: var(--font-display);
+}
+
+.demo-text p {
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    line-height: 1.6;
+}
+
+.demo-features {
+    list-style: none;
+    padding: 0;
+    margin-top: 1.5rem;
+}
+
+.demo-features li {
+    padding: 0.5rem 0;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.demo-features li:last-child {
+    border-bottom: none;
+}
+
+/* Right Side - Video */
+.demo-video-wrapper {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+    background: #000;
+    aspect-ratio: 16/9;
+    cursor: pointer;
+}
+
+.demo-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Play Button Overlay */
+.play-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.3s ease;
+    pointer-events: none;
+}
+
+.play-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.play-btn {
+    width: 70px;
+    height: 70px;
+    background: rgba(74, 222, 128, 0.9);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: #fff;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    transition: transform 0.3s ease;
+    pointer-events: auto;
+}
+
+.play-btn:hover {
+    transform: scale(1.1);
+    background: var(--leaf);
+}
+
+/* 🔥 Responsive */
+@media (max-width: 768px) {
+    .demo-grid {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+    
+    .demo-text h2 {
+        font-size: 1.5rem;
+    }
+    
+    .demo-video-section {
+        padding: 2rem 1rem;
+    }
+    
+    .play-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 1.5rem;
+    }
+}

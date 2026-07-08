@@ -553,3 +553,44 @@ function generateCleanPDF(result) {
 }
 
 console.log('✅ Clean PDF Generator Ready!');
+
+// ============================================
+// 🎥 VIDEO PLAY/PAUSE CONTROLS
+// ============================================
+
+document.addEventListener('DOMContentLoaded', function () {
+    const video = document.getElementById('demoVideo');
+    const playOverlay = document.getElementById('playOverlay');
+
+    if (video && playOverlay) {
+        // 🔥 Click on video = Play
+        video.addEventListener('click', function (e) {
+            if (this.paused) {
+                this.play();
+                playOverlay.classList.add('hidden');
+            } else {
+                this.pause();
+                playOverlay.classList.remove('hidden');
+            }
+        });
+
+        // 🔥 Click on play button = Play
+        playOverlay.addEventListener('click', function (e) {
+            e.stopPropagation();
+            video.play();
+            this.classList.add('hidden');
+        });
+
+        // 🔥 When video ends, show play button again
+        video.addEventListener('ended', function () {
+            playOverlay.classList.remove('hidden');
+        });
+
+        // 🔥 When video is paused by user, show play button
+        video.addEventListener('pause', function () {
+            if (!this.ended) {
+                playOverlay.classList.remove('hidden');
+            }
+        });
+    }
+});
