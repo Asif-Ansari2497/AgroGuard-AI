@@ -594,3 +594,186 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 });
+
+// ============================================
+// 📄 PDF GENERATOR - ADD THIS TO app.js
+// ============================================
+
+console.log('🔥 Loading PDF Generator...');
+
+// Wait for DOM
+document.addEventListener('DOMContentLoaded', function () {
+    console.log('📄 Setting up PDF button...');
+
+    // Try to find button after a short delay
+    setTimeout(function () {
+        const pdfBtn = document.getElementById('pdfBtn');
+
+        if (!pdfBtn) {
+            console.warn('⚠️ PDF Button not found in DOM');
+            return;
+        }
+
+        console.log('✅ PDF Button found!');
+
+        // Remove old listeners (if any)
+        const newBtn = pdfBtn.cloneNode(true);
+        pdfBtn.parentNode.replaceChild(newBtn, pdfBtn);
+
+        // Add click listener
+        newBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            console.log('🖱️ PDF button clicked!');
+
+            // Check result
+            const result = window._result;
+            console.log('📊 Result:', result);
+
+            if (!result) {
+                alert('⚠️ Please scan a leaf first!');
+                return;
+            }
+
+            // Check jsPDF
+            if (typeof window.jspdf === 'undefined' || typeof window.jspdf.jsPDF === 'undefined') {
+                console.error('❌ jsPDF not loaded!');
+                alert('⏳ PDF library loading... Please wait.');
+                return;
+            }
+
+            // Generate PDF
+            this.disabled = true;
+            this.textContent = '⏳ Generating...';
+
+            try {
+                generatePDF(result);
+                this.disabled = false;
+                this.textContent = '📄 Download PDF';
+            } catch (error) {
+                console.error('❌ Error:', error);
+                alert('Error: ' + error.message);
+                this.disabled = false;
+                this.textContent = '📄 Download PDF';
+            }
+        });
+
+        console.log('✅ PDF Button ready!');
+
+    }, 500);
+});
+
+// ============================================
+// 📄 PDf Generation Function
+// ============================================
+
+function generatePDF(result) {
+    console.log('📄 Generating PDF...');
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = 210;
+    let y = 20;
+
+    // Clean data
+    const disease = result.disease || 'Unknown Disease';
+    const confidence = result.confidence ? (result.confidence * 100).toFixed(1) + '%' : 'N/A';
+    const severity = result.severity || 'Unknown';
+    const description = result.description || 'No description available.';
+    const treatment = result.treatment || 'No treatment available.';
+    const prevention = result.prevention || 'No prevention available.';
+    const farmerName = localStorage.getItem('userName') || 'Farmer';
+
+    // Date
+    doc.setFontSize(11);
+    doc.setTextColor(100, 100, 100);
+    doc.text(new Date().toLocaleDateString('en-IN'), pageWidth - 30, y);
+    y += 10;
+
+    // Title
+    doc.setFontSize(28);
+    doc.setTextColor(0, 0, 0);
+    doc.text(disease, 20, y);
+    y += 12;
+
+    // Severity
+    const colors = { 'low': [0, 128, 0], 'medium': [255, 165, 0], 'high': [255, 0, 0], 'critical': [200, 0, 0] };
+    const color = colors[severity.toLowerCase()] || [0, 0, 0];
+    doc.setFontSize(14);
+    doc.setTextColor(color[0], color[1], color[2]);
+    doc.text(severity.toUpperCase(), 20, y);
+    y += 8;
+
+    // Confidence
+    doc.setFontSize(12);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Confidence: ${confidence}`, 20, y);
+    y += 8;
+
+    // Farmer
+    doc.setFontSize(11);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`Farmer: ${farmerName}`, 20, y);
+    y += 12;
+
+    // Divider
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, y, pageWidth - 20, y);
+    y += 10;
+
+    // Description
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text('DESCRIPTION', 20, y);
+    y += 8;
+    doc.setFontSize(11);
+    doc.setTextColor(50, 50, 50);
+    const descLines = doc.splitTextToSize(description, 170);
+    doc.text(descLines, 20, y);
+    y += (descLines.length * 5.5) + 10;
+
+    // Treatment
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text('TREATMENT PLAN', 20, y);
+    y += 8;
+    doc.setFontSize(11);
+    doc.setTextColor(50, 50, 50);
+    const treatLines = doc.splitTextToSize(treatment, 170);
+    doc.text(treatLines, 20, y);
+    y += (treatLines.length * 5.5) + 10;
+
+    // Prevention (new page if needed)
+    if (y > 230) { doc.addPage(); y = 20; }
+
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text('PREVENTION', 20, y);
+    y += 8;
+    doc.setFontSize(11);
+    doc.setTextColor(50, 50, 50);
+    const prevLines = doc.splitTextToSize(prevention, 170);
+    doc.text(prevLines, 20, y);
+    y += (prevLines.length * 5.5) + 10;
+
+    // Footer
+    y = 275;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, y, pageWidth - 20, y);
+    y += 5;
+    doc.setFontSize(9);
+    doc.setTextColor(150, 150, 150);
+    doc.text('🌾 AgroGuard AI - Diagnose. Treat. Save the Harvest.', 20, y + 5);
+    doc.text('Made in India 🇮🇳 | v1.0', 20, y + 12);
+    doc.text('Disclaimer: Consult a local agronomist for critical cases.', 20, y + 19);
+
+    // Save
+    const fileName = `AgroGuard_${disease.replace(/\s+/g, '_')}.pdf`;
+    doc.save(fileName);
+    console.log('✅ PDF saved:', fileName);
+
+    if (typeof notify === 'function') {
+        notify('📄 PDF downloaded successfully!', 'success');
+    }
+}
+
+console.log('✅ PDF Generator loaded successfully!');
